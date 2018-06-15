@@ -39,8 +39,6 @@
 
 	gpio_keys {
 		compatible = "gpio-keys";
-		#address-cells = <1>;
-		#size-cells = <0>;
 		user_button: button@0 {
 			label = "User";
 			gpios = <&gpioa 0 GPIO_INT_ACTIVE_LOW>;
@@ -74,5 +72,12 @@
 };
 
 &spi1 {
+	status = "ok";
+};
+
+&can1 {
+	pinctrl-0 = <&can_pins_a>;
+	pinctrl-names = "default";
+	bus-speed = <250000>;
 	status = "ok";
 };

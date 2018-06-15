@@ -36,13 +36,13 @@
 #include <init.h>
 #include <errno.h>
 #include <string.h>
+#include <misc/byteorder.h>
 #include <misc/__assert.h>
 #include <disk_access.h>
 #include <usb/class/usb_msc.h>
 #include <usb/usb_device.h>
 #include <usb/usb_common.h>
 #include <usb_descriptor.h>
-#include <composite.h>
 
 #define SYS_LOG_LEVEL CONFIG_SYS_LOG_USB_MASS_STORAGE_LEVEL
 #define SYS_LOG_DOMAIN "usb/msc"
@@ -59,6 +59,47 @@
 #define THREAD_OP_WRITE_QUEUED		3
 #define THREAD_OP_WRITE_DONE		4
 
+struct usb_mass_config {
+	struct usb_if_descriptor if0;
+	struct usb_ep_descriptor if0_in_ep;
+	struct usb_ep_descriptor if0_out_ep;
+} __packed;
+
+USBD_CLASS_DESCR_DEFINE(primary) struct usb_mass_config mass_cfg = {
+	/* Interface descriptor */
+	.if0 = {
+		.bLength = sizeof(struct usb_if_descriptor),
+		.bDescriptorType = USB_INTERFACE_DESC,
+		.bInterfaceNumber = 0,
+		.bAlternateSetting = 0,
+		.bNumEndpoints = 2,
+		.bInterfaceClass = MASS_STORAGE_CLASS,
+		.bInterfaceSubClass = SCSI_TRANSPARENT_SUBCLASS,
+		.bInterfaceProtocol = BULK_ONLY_PROTOCOL,
+		.iInterface = 0,
+	},
+	/* First Endpoint IN */
+	.if0_in_ep = {
+		.bLength = sizeof(struct usb_ep_descriptor),
+		.bDescriptorType = USB_ENDPOINT_DESC,
+		.bEndpointAddress = CONFIG_MASS_STORAGE_IN_EP_ADDR,
+		.bmAttributes = USB_DC_EP_BULK,
+		.wMaxPacketSize =
+			sys_cpu_to_le16(CONFIG_MASS_STORAGE_BULK_EP_MPS),
+		.bInterval = 0x00,
+	},
+	/* Second Endpoint OUT */
+	.if0_out_ep = {
+		.bLength = sizeof(struct usb_ep_descriptor),
+		.bDescriptorType = USB_ENDPOINT_DESC,
+		.bEndpointAddress = CONFIG_MASS_STORAGE_OUT_EP_ADDR,
+		.bmAttributes = USB_DC_EP_BULK,
+		.wMaxPacketSize =
+			sys_cpu_to_le16(CONFIG_MASS_STORAGE_BULK_EP_MPS),
+		.bInterval = 0x00,
+	},
+};
+
 static volatile int thread_op;
 static K_THREAD_STACK_DEFINE(mass_thread_stack, DISK_THREAD_STACK_SZ);
 static struct k_thread mass_thread_data;
@@ -70,6 +111,27 @@ static u8_t page[BLOCK_SIZE];
 /* Initialized during mass_storage_init() */
 static u32_t memory_size;
 static u32_t block_count;
+static const char *disk_pdrv = CONFIG_MASS_STORAGE_DISK_NAME;
+
+#define MSD_OUT_EP_IDX			0
+#define MSD_IN_EP_IDX			1
+
+static void mass_storage_bulk_out(u8_t ep,
+				  enum usb_dc_ep_cb_status_code ep_status);
+static void mass_storage_bulk_in(u8_t ep,
+				 enum usb_dc_ep_cb_status_code ep_status);
+
+/* Describe EndPoints configuration */
+static struct usb_ep_cfg_data mass_ep_data[] = {
+	{
+		.ep_cb	= mass_storage_bulk_out,
+		.ep_addr = CONFIG_MASS_STORAGE_OUT_EP_ADDR
+	},
+	{
+		.ep_cb = mass_storage_bulk_in,
+		.ep_addr = CONFIG_MASS_STORAGE_IN_EP_ADDR
+	}
+};
 
 /* CSW Status */
 enum Status {
@@ -124,7 +186,7 @@ static void msd_init(void)
 static void sendCSW(void)
 {
 	csw.Signature = CSW_Signature;
-	if (usb_write(CONFIG_MASS_STORAGE_IN_EP_ADDR, (u8_t *)&csw,
+	if (usb_write(mass_ep_data[MSD_IN_EP_IDX].ep_addr, (u8_t *)&csw,
 		      sizeof(struct CSW), NULL) != 0) {
 		SYS_LOG_ERR("usb write failure");
 	}
@@ -142,7 +204,7 @@ static bool write(u8_t *buf, u16_t size)
 	 */
 	stage = SEND_CSW;
 
-	if (usb_write(CONFIG_MASS_STORAGE_IN_EP_ADDR, buf, size, NULL)) {
+	if (usb_write(mass_ep_data[MSD_IN_EP_IDX].ep_addr, buf, size, NULL)) {
 		SYS_LOG_ERR("USB write failed");
 		return false;
 	}
@@ -192,10 +254,10 @@ static void testUnitReady(void)
 	if (cbw.DataLength != 0) {
 		if ((cbw.Flags & 0x80) != 0) {
 			SYS_LOG_WRN("Stall IN endpoint");
-			usb_ep_set_stall(CONFIG_MASS_STORAGE_IN_EP_ADDR);
+			usb_ep_set_stall(mass_ep_data[MSD_IN_EP_IDX].ep_addr);
 		} else {
 			SYS_LOG_WRN("Stall OUT endpoint");
-			usb_ep_set_stall(CONFIG_MASS_STORAGE_OUT_EP_ADDR);
+			usb_ep_set_stall(mass_ep_data[MSD_OUT_EP_IDX].ep_addr);
 		}
 	}
 
@@ -293,10 +355,10 @@ static void thread_memory_read_done(void)
 		stage = ERROR;
 	}
 
-	if (usb_write(CONFIG_MASS_STORAGE_IN_EP_ADDR,
+	if (usb_write(mass_ep_data[MSD_IN_EP_IDX].ep_addr,
 		&page[addr % BLOCK_SIZE], n, NULL) != 0) {
 		SYS_LOG_ERR("Failed to write EP 0x%x",
-			    CONFIG_MASS_STORAGE_IN_EP_ADDR);
+			    mass_ep_data[MSD_IN_EP_IDX].ep_addr);
 	}
 	addr += n;
 	length -= n;
@@ -327,7 +389,7 @@ static void memoryRead(void)
 		k_sem_give(&disk_wait_sem);
 		return;
 	}
-	usb_write(CONFIG_MASS_STORAGE_IN_EP_ADDR,
+	usb_write(mass_ep_data[MSD_IN_EP_IDX].ep_addr,
 		  &page[addr % BLOCK_SIZE], n, NULL);
 	addr += n;
 	length -= n;
@@ -379,10 +441,10 @@ static bool infoTransfer(void)
 	if (cbw.DataLength != length) {
 		if ((cbw.Flags & 0x80) != 0) {
 			SYS_LOG_WRN("Stall IN endpoint");
-			usb_ep_set_stall(CONFIG_MASS_STORAGE_IN_EP_ADDR);
+			usb_ep_set_stall(mass_ep_data[MSD_IN_EP_IDX].ep_addr);
 		} else {
 			SYS_LOG_WRN("Stall OUT endpoint");
-			usb_ep_set_stall(CONFIG_MASS_STORAGE_OUT_EP_ADDR);
+			usb_ep_set_stall(mass_ep_data[MSD_OUT_EP_IDX].ep_addr);
 		}
 
 		csw.Status = CSW_FAILED;
@@ -453,7 +515,7 @@ static void CBWDecode(u8_t *buf, u16_t size)
 					memoryRead();
 				} else {
 					usb_ep_set_stall(
-					    CONFIG_MASS_STORAGE_OUT_EP_ADDR);
+					  mass_ep_data[MSD_OUT_EP_IDX].ep_addr);
 					SYS_LOG_WRN("Stall OUT endpoint");
 					csw.Status = CSW_ERROR;
 					sendCSW();
@@ -468,7 +530,7 @@ static void CBWDecode(u8_t *buf, u16_t size)
 					stage = PROCESS_CBW;
 				} else {
 					usb_ep_set_stall(
-					    CONFIG_MASS_STORAGE_IN_EP_ADDR);
+					  mass_ep_data[MSD_IN_EP_IDX].ep_addr);
 					SYS_LOG_WRN("Stall IN endpoint");
 					csw.Status = CSW_ERROR;
 					sendCSW();
@@ -488,7 +550,7 @@ static void CBWDecode(u8_t *buf, u16_t size)
 					memOK = true;
 				} else {
 					usb_ep_set_stall(
-					    CONFIG_MASS_STORAGE_IN_EP_ADDR);
+					  mass_ep_data[MSD_IN_EP_IDX].ep_addr);
 					SYS_LOG_WRN("Stall IN endpoint");
 					csw.Status = CSW_ERROR;
 					sendCSW();
@@ -516,14 +578,14 @@ static void memoryVerify(u8_t *buf, u16_t size)
 	if ((addr + size) > memory_size) {
 		size = memory_size - addr;
 		stage = ERROR;
-		usb_ep_set_stall(CONFIG_MASS_STORAGE_OUT_EP_ADDR);
+		usb_ep_set_stall(mass_ep_data[MSD_OUT_EP_IDX].ep_addr);
 		SYS_LOG_WRN("Stall OUT endpoint");
 	}
 
 	/* beginning of a new block -> load a whole block in RAM */
 	if (!(addr % BLOCK_SIZE)) {
 		SYS_LOG_DBG("Disk READ sector %d", addr/BLOCK_SIZE);
-		if (disk_access_read(page, addr/BLOCK_SIZE, 1)) {
+		if (disk_access_read(disk_pdrv, page, addr/BLOCK_SIZE, 1)) {
 			SYS_LOG_ERR("---- Disk Read Error %d", addr/BLOCK_SIZE);
 		}
 	}
@@ -554,7 +616,7 @@ static void memoryWrite(u8_t *buf, u16_t size)
 	if ((addr + size) > memory_size) {
 		size = memory_size - addr;
 		stage = ERROR;
-		usb_ep_set_stall(CONFIG_MASS_STORAGE_OUT_EP_ADDR);
+		usb_ep_set_stall(mass_ep_data[MSD_OUT_EP_IDX].ep_addr);
 		SYS_LOG_WRN("Stall OUT endpoint");
 	}
 
@@ -565,7 +627,8 @@ static void memoryWrite(u8_t *buf, u16_t size)
 
 	/* if the array is filled, write it in memory */
 	if (!((addr + size) % BLOCK_SIZE)) {
-		if (!(disk_access_status() & DISK_STATUS_WR_PROTECT)) {
+		if (!(disk_access_status(disk_pdrv) &
+					DISK_STATUS_WR_PROTECT)) {
 			SYS_LOG_DBG("Disk WRITE Qd %d", (addr/BLOCK_SIZE));
 			thread_op = THREAD_OP_WRITE_QUEUED;  /* write_queued */
 			defered_wr_sz = size;
@@ -655,7 +718,7 @@ static void thread_memory_write_done(void)
 
 	thread_op = THREAD_OP_WRITE_DONE;
 
-	usb_ep_read_continue(CONFIG_MASS_STORAGE_OUT_EP_ADDR);
+	usb_ep_read_continue(mass_ep_data[MSD_OUT_EP_IDX].ep_addr);
 }
 
 /**
@@ -702,7 +765,7 @@ static void mass_storage_bulk_in(u8_t ep,
 	/*an error has occurred*/
 	default:
 		SYS_LOG_WRN("Stall IN endpoint, stage: %d", stage);
-		usb_ep_set_stall(CONFIG_MASS_STORAGE_IN_EP_ADDR);
+		usb_ep_set_stall(mass_ep_data[MSD_IN_EP_IDX].ep_addr);
 		sendCSW();
 		break;
 	}
@@ -753,28 +816,23 @@ static void mass_storage_status_cb(enum usb_dc_status_code status, u8_t *param)
 	}
 }
 
-/* Describe EndPoints configuration */
-static struct usb_ep_cfg_data mass_ep_data[] = {
-	{
-		.ep_cb	= mass_storage_bulk_out,
-		.ep_addr = CONFIG_MASS_STORAGE_OUT_EP_ADDR
-	},
-	{
-		.ep_cb = mass_storage_bulk_in,
-		.ep_addr = CONFIG_MASS_STORAGE_IN_EP_ADDR
-	}
-};
+static void mass_interface_config(u8_t bInterfaceNumber)
+{
+	mass_cfg.if0.bInterfaceNumber = bInterfaceNumber;
+}
 
 /* Configuration of the Mass Storage Device send to the USB Driver */
-static struct usb_cfg_data mass_storage_config = {
+USBD_CFG_DATA_DEFINE(msd) struct usb_cfg_data mass_storage_config = {
 	.usb_device_description = NULL,
+	.interface_config = mass_interface_config,
+	.interface_descriptor = &mass_cfg.if0,
 	.cb_usb_status = mass_storage_status_cb,
 	.interface = {
 		.class_handler = mass_storage_class_handle_req,
 		.custom_handler = NULL,
 		.payload_data = NULL,
 	},
-	.num_endpoints = NUMOF_ENDPOINTS_MASS,
+	.num_endpoints = ARRAY_SIZE(mass_ep_data),
 	.endpoint = mass_ep_data
 };
 
@@ -789,7 +847,8 @@ static void mass_thread_main(int arg1, int unused)
 
 		switch (thread_op) {
 		case THREAD_OP_READ_QUEUED:
-			if (disk_access_read(page, (addr/BLOCK_SIZE), 1)) {
+			if (disk_access_read(disk_pdrv,
+						page, (addr/BLOCK_SIZE), 1)) {
 				SYS_LOG_ERR("!! Disk Read Error %d !",
 					    addr/BLOCK_SIZE);
 			}
@@ -797,7 +856,8 @@ static void mass_thread_main(int arg1, int unused)
 			thread_memory_read_done();
 			break;
 		case THREAD_OP_WRITE_QUEUED:
-			if (disk_access_write(page, (addr/BLOCK_SIZE), 1)) {
+			if (disk_access_write(disk_pdrv,
+						page, (addr/BLOCK_SIZE), 1)) {
 				SYS_LOG_ERR("!!!!! Disk Write Error %d !!!!!",
 					    addr/BLOCK_SIZE);
 			}
@@ -826,22 +886,23 @@ static u8_t interface_data[64];
  */
 static int mass_storage_init(struct device *dev)
 {
-	int ret;
 	u32_t block_size = 0;
 
 	ARG_UNUSED(dev);
 
-	if (disk_access_init() != 0) {
+	if (disk_access_init(disk_pdrv) != 0) {
 		SYS_LOG_ERR("Storage init ERROR !!!! - Aborting USB init");
 		return 0;
 	}
 
-	if (disk_access_ioctl(DISK_IOCTL_GET_SECTOR_COUNT, &block_count)) {
+	if (disk_access_ioctl(disk_pdrv,
+				DISK_IOCTL_GET_SECTOR_COUNT, &block_count)) {
 		SYS_LOG_ERR("Unable to get sector count - Aborting USB init");
 		return 0;
 	}
 
-	if (disk_access_ioctl(DISK_IOCTL_GET_SECTOR_SIZE, &block_size)) {
+	if (disk_access_ioctl(disk_pdrv,
+				DISK_IOCTL_GET_SECTOR_SIZE, &block_size)) {
 		SYS_LOG_ERR("Unable to get sector size - Aborting USB init");
 		return 0;
 	}
@@ -860,14 +921,9 @@ static int mass_storage_init(struct device *dev)
 	msd_state_machine_reset();
 	msd_init();
 
-#ifdef CONFIG_USB_COMPOSITE_DEVICE
-	ret = composite_add_function(&mass_storage_config,
-				 FIRST_IFACE_MASS_STORAGE);
-	if (ret < 0) {
-		SYS_LOG_ERR("Failed to add a function");
-		return ret;
-	}
-#else
+#ifndef CONFIG_USB_COMPOSITE_DEVICE
+	int ret;
+
 	mass_storage_config.interface.payload_data = interface_data;
 	mass_storage_config.usb_device_description =
 		usb_get_device_descriptor();

@@ -7,11 +7,14 @@
 #include <syscall_handler.h>
 #include <aio_comparator.h>
 
-_SYSCALL_HANDLER(aio_cmp_disable, dev, index)
+Z_SYSCALL_HANDLER(aio_cmp_disable, dev, index)
 {
-	_SYSCALL_OBJ(dev, K_OBJ_DRIVER_AIO);
+	Z_OOPS(Z_SYSCALL_DRIVER_AIO_CMP(dev, disable));
 	return _impl_aio_cmp_disable((struct device *)dev, index);
 }
 
-_SYSCALL_HANDLER1_SIMPLE(aio_cmp_get_pending_int, K_OBJ_DRIVER_AIO,
-			 struct device *);
+Z_SYSCALL_HANDLER(aio_cmp_get_pending_int, dev)
+{
+	Z_OOPS(Z_SYSCALL_DRIVER_AIO_CMP(dev, get_pending_int));
+	return _impl_aio_get_pending_int((struct device *)dev, index);
+}

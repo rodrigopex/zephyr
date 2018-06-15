@@ -4,26 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * @addtogroup t_mbox
- * @{
- * @defgroup t_mbox_api test_mbox_api
- * @brief TestPurpose: verify data passing via mailbox APIs
- * - API coverage
- *   -# K_MBOX_DEFINE
- *   -# k_mbox_init
- *   -# k_mbox_put
- *   -# k_mbox_async_put
- *   -# k_mbox_get
- *   -# k_mbox_data_get
- *   -# k_mbox_data_block_get
- * @}
- */
-
 #include <ztest.h>
 
 #define TIMEOUT 100
+#if !defined(CONFIG_BOARD_QEMU_X86)
 #define STACK_SIZE (512 + CONFIG_TEST_EXTRA_STACKSIZE)
+#else
+#define STACK_SIZE (640 + CONFIG_TEST_EXTRA_STACKSIZE)
+#endif
 #define MAIL_LEN 64
 
 /**TESTPOINT: init via K_MBOX_DEFINE*/
@@ -82,7 +70,7 @@ static void async_put_sema_give(void *p1, void *p2, void *p3)
 
 static void mbox_get_waiting_thread(void *thread_number, void *pmbox, void *p3)
 {
-	struct k_mbox_msg mmsg;
+	struct k_mbox_msg mmsg = {0};
 
 	switch ((int) thread_number) {
 	case 0:
@@ -118,9 +106,7 @@ static void mbox_get_waiting_thread(void *thread_number, void *pmbox, void *p3)
 
 static void tmbox_put(struct k_mbox *pmbox)
 {
-	struct k_mbox_msg mmsg;
-
-	memset(&mmsg, 0, sizeof(mmsg));
+	struct k_mbox_msg mmsg = {0};
 
 	switch (info_type) {
 	case PUT_GET_NULL:
@@ -309,7 +295,7 @@ static void tmbox_put(struct k_mbox *pmbox)
 
 static void tmbox_get(struct k_mbox *pmbox)
 {
-	struct k_mbox_msg mmsg;
+	struct k_mbox_msg mmsg = {0};
 	char rxdata[MAIL_LEN];
 	struct k_mem_block rxblock;
 

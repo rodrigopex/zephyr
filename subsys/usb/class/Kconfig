@@ -88,6 +88,13 @@ config USB_MASS_STORAGE
 	help
 	  USB Mass Storage device class driver
 
+config MASS_STORAGE_DISK_NAME
+	string "Mass storage disk or drive name"
+	depends on USB_MASS_STORAGE
+	default "RAM"
+	help
+	  Mass storage device disk or drive name
+
 config MASS_STORAGE_IN_EP_ADDR
 	hex
 	depends on USB_MASS_STORAGE
@@ -184,5 +191,24 @@ config BLUETOOTH_BULK_EP_MPS
 source "subsys/usb/class/netusb/Kconfig"
 
 source "subsys/usb/class/hid/Kconfig"
+
+config USB_DFU_CLASS
+	bool
+	prompt "USB DFU Class Driver"
+	depends on IMG_MANAGER
+	select MPU_ALLOW_FLASH_WRITE
+	default n
+	help
+	  USB DFU class driver
+
+config USB_DFU_MAX_XFER_SIZE
+	int
+	depends on USB_DFU_CLASS
+	default 64
+
+config USB_DFU_DETACH_TIMEOUT
+	int
+	depends on USB_DFU_CLASS
+	default 1000
 
 endif # CONFIG_USB_DEVICE_STACK

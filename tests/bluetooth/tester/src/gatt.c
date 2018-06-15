@@ -367,7 +367,10 @@ static int alloc_characteristic(struct add_characteristic *ch)
 
 	/* Add Characteristic Declaration */
 	attr_chrc = gatt_db_add(&(struct bt_gatt_attr)
-				BT_GATT_CHARACTERISTIC(NULL, 0),
+				BT_GATT_ATTRIBUTE(BT_UUID_GATT_CHRC,
+						  BT_GATT_PERM_READ,
+						  bt_gatt_attr_read_chrc, NULL,
+						  (&(struct bt_gatt_chrc){})),
 				sizeof(*chrc_data));
 	if (!attr_chrc) {
 		return -EINVAL;
@@ -398,7 +401,7 @@ static int alloc_characteristic(struct add_characteristic *ch)
 
 	/* Add Characteristic Value */
 	attr_value = gatt_db_add(&(struct bt_gatt_attr)
-				 BT_GATT_DESCRIPTOR(ch->uuid,
+				 BT_GATT_ATTRIBUTE(ch->uuid,
 					ch->permissions & GATT_PERM_MASK,
 					read_value, write_value, &value),
 					sizeof(value));
@@ -800,10 +803,12 @@ static void start_server(u8_t *data, u16_t len)
 	struct gatt_start_server_rp rp;
 
 	/* Register last defined service */
-	if (register_service()) {
-		tester_rsp(BTP_SERVICE_ID_GATT, GATT_START_SERVER,
-			   CONTROLLER_INDEX, BTP_STATUS_FAILED);
-		return;
+	if (svc_count) {
+		if (register_service()) {
+			tester_rsp(BTP_SERVICE_ID_GATT, GATT_START_SERVER,
+				   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+			return;
+		}
 	}
 
 	tester_send(BTP_SERVICE_ID_GATT, GATT_START_SERVER, CONTROLLER_INDEX,

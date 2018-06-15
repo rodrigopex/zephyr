@@ -230,7 +230,7 @@ alreadyOnIntStack:
 	sti			/* re-enable interrupts */
 #endif
 	/* Now call the interrupt handler */
-	call	*%edx
+	INDIRECT_CALL(%edx)
 #ifndef CONFIG_X86_IAMCU
 	/* Discard ISR argument */
 	addl	$0x4, %esp
@@ -254,14 +254,6 @@ alreadyOnIntStack:
 
 #ifdef CONFIG_PREEMPT_ENABLED
 	movl	_kernel_offset_to_current(%ecx), %edx
-
-	/*
-	 * Non-preemptible thread ? Do not schedule (see explanation of
-	 * preempt field in kernel_struct.h).
-	 */
-	cmpw	$_NON_PREEMPT_THRESHOLD, _thread_offset_to_preempt(%edx)
-	jae	noReschedule
-
 
 	/* reschedule only if the scheduler says that we must do so */
 	cmpl	%edx, _kernel_offset_to_ready_q_cache(%ecx)

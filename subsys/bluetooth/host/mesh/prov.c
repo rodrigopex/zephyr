@@ -34,8 +34,7 @@
 #include "prov.h"
 
 /* 3 transmissions, 20ms interval */
-#define PROV_XMIT_COUNT        2
-#define PROV_XMIT_INT          20
+#define PROV_XMIT              BT_MESH_TRANSMIT(2, 20)
 
 #define AUTH_METHOD_NO_OOB     0x00
 #define AUTH_METHOD_STATIC     0x01
@@ -264,8 +263,7 @@ static struct net_buf *adv_buf_create(void)
 {
 	struct net_buf *buf;
 
-	buf = bt_mesh_adv_create(BT_MESH_ADV_PROV, PROV_XMIT_COUNT,
-				 PROV_XMIT_INT, BUF_TIMEOUT);
+	buf = bt_mesh_adv_create(BT_MESH_ADV_PROV, PROV_XMIT, BUF_TIMEOUT);
 	if (!buf) {
 		BT_ERR("Out of provisioning buffers");
 		return NULL;
@@ -993,6 +991,15 @@ static void prov_random(const u8_t *data)
 	link.expect = PROV_DATA;
 }
 
+static inline bool is_pb_gatt(void)
+{
+#if defined(CONFIG_BT_MESH_PB_GATT)
+	return !!link.conn;
+#else
+	return false;
+#endif
+}
+
 static void prov_data(const u8_t *data)
 {
 	PROV_BUF(msg, 1);
@@ -1005,6 +1012,7 @@ static void prov_data(const u8_t *data)
 	u16_t addr;
 	u16_t net_idx;
 	int err;
+	bool identity_enable;
 
 	BT_DBG("");
 
@@ -1056,16 +1064,21 @@ static void prov_data(const u8_t *data)
 	/* Ignore any further PDUs on this link */
 	link.expect = 0;
 
-	bt_mesh_provision(pdu, net_idx, flags, iv_index, 0, addr, dev_key);
+	/* Store info, since bt_mesh_provision() will end up clearing it */
+	if (IS_ENABLED(CONFIG_BT_MESH_GATT_PROXY)) {
+		identity_enable = is_pb_gatt();
+	} else {
+		identity_enable = false;
+	}
 
-#if defined(CONFIG_BT_MESH_PB_GATT) && defined(CONFIG_BT_MESH_GATT_PROXY)
+	bt_mesh_provision(pdu, net_idx, flags, iv_index, addr, dev_key);
+
 	/* After PB-GATT provisioning we should start advertising
 	 * using Node Identity.
 	 */
-	if (link.conn) {
+	if (identity_enable) {
 		bt_mesh_proxy_identity_enable();
 	}
-#endif
 }
 
 static void prov_complete(const u8_t *data)

@@ -57,11 +57,11 @@ The frdm_kl25z board configuration supports the following hardware features:
 +-----------+------------+-------------------------------------+
 | I2C       | on-chip    | i2c                                 |
 +-----------+------------+-------------------------------------+
-| SPI       | on-chip    | spi                                 |
-+-----------+------------+-------------------------------------+
 | ADC       | on-chip    | adc                                 |
 +-----------+------------+-------------------------------------+
 | FLASH     | on-chip    | soc flash                           |
++-----------+------------+-------------------------------------+
+| USB       | on-chip    | USB device                          |
 +-----------+------------+-------------------------------------+
 
 The default configuration can be found in the defconfig file:
@@ -95,14 +95,6 @@ The KL25Z SoC has five pairs of pinmux/gpio controllers, and all are currently e
 +-------+-------------+---------------------------+
 | PTE25 | I2C0_SDA    | I2C                       |
 +-------+-------------+---------------------------+
-| PTC4  | SPI0_PSC0   | SPI                       |
-+-------+-------------+---------------------------+
-| PTC5  | SPI0_SCK    | SPI                       |
-+-------+-------------+---------------------------+
-| PTC6  | SPI0_MOSI   | SPI                       |
-+-------+-------------+---------------------------+
-| PTC7  | SPI0_MISO   | SPI                       |
-+-------+-------------+---------------------------+
 
 
 System Clock
@@ -115,6 +107,13 @@ Serial Port
 ===========
 
 The KL25Z UART0 is used for the console.
+
+USB
+===
+
+The KL25Z SoC has a USB OTG (USBOTG) controller that supports both
+device and host functions through its mini USB connector (USB KL25Z).
+Only USB device function is supported in Zephyr at the moment.
 
 Programming and Debugging
 *************************

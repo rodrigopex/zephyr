@@ -48,7 +48,7 @@ static void wdt_esp32_enable(struct device *dev)
 	wdt_esp32_seal();
 }
 
-static void wdt_esp32_disable(struct device *dev)
+static int wdt_esp32_disable(struct device *dev)
 {
 	volatile u32_t *reg = (u32_t *)TIMG_WDTCONFIG0_REG(1);
 
@@ -57,6 +57,8 @@ static void wdt_esp32_disable(struct device *dev)
 	wdt_esp32_unseal();
 	*reg &= ~BIT(TIMG_WDT_EN_S);
 	wdt_esp32_seal();
+
+	return 0;
 }
 
 static void adjust_timeout(u32_t timeout)
@@ -204,7 +206,7 @@ static int wdt_esp32_init(struct device *dev)
 
 	memset(&data->config, 0, sizeof(data->config));
 
-#ifdef CONFIG_ESP32_DISABLE_AT_BOOT
+#ifdef CONFIG_WDT_DISABLE_AT_BOOT
 	wdt_esp32_disable(dev);
 #endif
 
@@ -226,7 +228,7 @@ static const struct wdt_driver_api wdt_api = {
 	.reload = wdt_esp32_reload
 };
 
-DEVICE_AND_API_INIT(wdt_esp32, CONFIG_WDT_ESP32_DEVICE_NAME, wdt_esp32_init,
+DEVICE_AND_API_INIT(wdt_esp32, CONFIG_WDT_0_NAME, wdt_esp32_init,
 		    &shared_data, NULL,
 		    PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
 		    &wdt_api);

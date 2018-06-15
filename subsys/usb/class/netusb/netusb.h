@@ -19,19 +19,21 @@ struct netusb_function {
 	int (*send_pkt)(struct net_pkt *pkt);
 	int (*class_handler)(struct usb_setup_packet *setup, s32_t *len,
 			     u8_t **data);
+	void (*status_cb)(enum usb_dc_status_code status, u8_t *param);
 };
 
 void netusb_recv(struct net_pkt *pkt);
 int try_write(u8_t ep, u8_t *data, u16_t len);
 
+void netusb_enable(void);
+void netusb_disable(void);
+u8_t netusb_get_first_iface_number(void);
+
 #if defined(CONFIG_USB_DEVICE_NETWORK_ECM)
-#define NETUSB_IFACE_IDX FIRST_IFACE_CDC_ECM
 struct netusb_function ecm_function;
 #elif defined(CONFIG_USB_DEVICE_NETWORK_RNDIS)
-#define NETUSB_IFACE_IDX FIRST_IFACE_RNDIS
 struct netusb_function rndis_function;
 #elif defined(CONFIG_USB_DEVICE_NETWORK_EEM)
-#define NETUSB_IFACE_IDX FIRST_IFACE_CDC_EEM
 struct netusb_function eem_function;
 #else
 #error Unknown USB Device Networking function

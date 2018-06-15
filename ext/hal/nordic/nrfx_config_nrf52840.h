@@ -46,6 +46,8 @@
 // <0=> RC
 // <1=> XTAL
 // <2=> Synth
+// <131073=> External Low Swing
+// <196609=> External Full Swing
 
 #ifndef NRFX_CLOCK_CONFIG_LF_SRC
 #define NRFX_CLOCK_CONFIG_LF_SRC 1
@@ -2901,8 +2903,8 @@
 
 // <e> NRFX_WDT_ENABLED - nrfx_wdt - WDT peripheral driver
 //==========================================================
-#ifndef NRFX_WDT_ENABLED
-#define NRFX_WDT_ENABLED 0
+#ifdef CONFIG_NRFX_WDT
+#define NRFX_WDT_ENABLED 1
 #endif
 // <o> NRFX_WDT_CONFIG_BEHAVIOUR  - WDT behavior in CPU SLEEP or HALT mode
 

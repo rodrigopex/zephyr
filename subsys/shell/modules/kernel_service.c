@@ -8,6 +8,9 @@
 #include <shell/shell.h>
 #include <init.h>
 #include <debug/object_tracing.h>
+#include <misc/reboot.h>
+#include <misc/stack.h>
+#include <string.h>
 
 #define SHELL_KERNEL "kernel"
 
@@ -46,32 +49,61 @@ static int shell_cmd_cycles(int argc, char *argv[])
 }
 
 #if defined(CONFIG_OBJECT_TRACING) && defined(CONFIG_THREAD_MONITOR)
+static void shell_tdata_dump(const struct k_thread *thread, void *user_data)
+{
+	printk("%s%p:   options: 0x%x priority: %d\n",
+		(thread == k_current_get()) ? "*" : " ",
+		thread,
+		thread->base.user_options,
+		thread->base.prio);
+}
+
 static int shell_cmd_threads(int argc, char *argv[])
 {
 	ARG_UNUSED(argc);
 	ARG_UNUSED(argv);
-	struct k_thread *thread_list = NULL;
 
 	printk("Threads:\n");
+	k_thread_foreach(shell_tdata_dump, NULL);
 
-	thread_list   = (struct k_thread *)SYS_THREAD_MONITOR_HEAD;
-	while (thread_list != NULL) {
-		printk("%s%p:   options: 0x%x priority: %d\n",
-		       (thread_list == k_current_get()) ? "*" : " ",
-		       thread_list,
-		       thread_list->base.user_options,
-		       k_thread_priority_get(thread_list));
-		thread_list = (struct k_thread *)SYS_THREAD_MONITOR_NEXT(thread_list);
-	}
 	return 0;
 }
 #endif
 
 
-#if defined(CONFIG_INIT_STACKS)
+#if defined(CONFIG_INIT_STACKS) && defined(CONFIG_THREAD_MONITOR) \
+				&& defined(CONFIG_THREAD_STACK_INFO)
+static void shell_stack_dump(const struct k_thread *thread, void *user_data)
+{
+	stack_analyze((char *)user_data, (char *)thread->stack_info.start,
+						thread->stack_info.size);
+}
+
 static int shell_cmd_stack(int argc, char *argv[])
 {
-	k_call_stacks_analyze();
+	k_thread_foreach(shell_stack_dump, "Shell");
+	return 0;
+}
+#endif
+
+#if defined(CONFIG_REBOOT)
+static int shell_cmd_reboot(int argc, char *argv[])
+{
+	int type;
+
+	if (argc != 2) {
+		return -EINVAL;
+	}
+
+	if (!strcmp(argv[1], "warm")) {
+		type = SYS_REBOOT_WARM;
+	} else if (!strcmp(argv[1], "cold")) {
+		type = SYS_REBOOT_COLD;
+	} else {
+		return -EINVAL;
+	}
+
+	sys_reboot(type);
 	return 0;
 }
 #endif
@@ -83,8 +115,12 @@ struct shell_cmd kernel_commands[] = {
 #if defined(CONFIG_OBJECT_TRACING) && defined(CONFIG_THREAD_MONITOR)
 	{ "threads", shell_cmd_threads, "show running threads" },
 #endif
-#if defined(CONFIG_INIT_STACKS)
+#if defined(CONFIG_INIT_STACKS) && defined(CONFIG_THREAD_MONITOR) \
+				&& defined(CONFIG_THREAD_STACK_INFO)
 	{ "stacks", shell_cmd_stack, "show system stacks" },
+#endif
+#if defined(CONFIG_REBOOT)
+	{ "reboot", shell_cmd_reboot, "<warm cold>" },
 #endif
 	{ NULL, NULL, NULL }
 };

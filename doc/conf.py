@@ -14,11 +14,16 @@
 
 import sys
 import os
-import shlex
+
+if "ZEPHYR_BASE" not in os.environ:
+    sys.exit("$ZEPHYR_BASE environment variable undefined.")
+ZEPHYR_BASE = os.environ["ZEPHYR_BASE"]
 
 # Add the 'extensions' directory to sys.path, to enable finding Sphinx
 # extensions within.
 sys.path.insert(0, os.path.join(os.path.abspath('.'), 'extensions'))
+# Also add west, to be able to pull in its API docs.
+sys.path.append(os.path.abspath(os.path.join(ZEPHYR_BASE, 'scripts', 'meta')))
 
 # -- General configuration ------------------------------------------------
 
@@ -31,6 +36,7 @@ sys.path.insert(0, os.path.join(os.path.abspath('.'), 'extensions'))
 extensions = [
     'breathe', 'sphinx.ext.todo',
     'sphinx.ext.extlinks',
+    'sphinx.ext.autodoc',
     'zephyr.application',
 ]
 
@@ -52,11 +58,6 @@ master_doc = 'index'
 project = u'Zephyr Project'
 copyright = u'2015-2017 Zephyr Project members and individual contributors.'
 author = u'many'
-
-if "ZEPHYR_BASE" not in os.environ:
-    sys.stderr.write("$ZEPHYR_BASE environment variable undefined.\n")
-    exit(1)
-ZEPHYR_BASE = os.environ["ZEPHYR_BASE"]
 
 # The following code tries to extract the information by reading the Makefile,
 # when Sphinx is run directly (e.g. by Read the Docs).
@@ -139,20 +140,7 @@ lexers['DTS'] = DtsLexer()
 todo_include_todos = False
 
 rst_epilog = """
-.. |codename| replace:: Zephyr Kernel
-.. |project| replace:: Zephyr Project
-.. |copy|   unicode:: U+000A9 .. COPYRIGHT SIGN
-   :ltrim:
-.. |trade|  unicode:: U+02122 .. TRADEMARK SIGN
-   :ltrim:
-.. |reg|    unicode:: U+000AE .. REGISTERED TRADEMARK SIGN
-   :ltrim:
-.. |deg|    unicode:: U+000B0 .. DEGREE SIGN
-   :ltrim:
-.. |plusminus|  unicode:: U+000B1 .. PLUS-MINUS SIGN
-   :rtrim:
-.. |micro|  unicode:: U+000B5 .. MICRO SIGN
-   :rtrim:
+.. include:: /substitutions.txt
 """
 
 # -- Options for HTML output ----------------------------------------------

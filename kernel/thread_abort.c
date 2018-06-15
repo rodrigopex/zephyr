@@ -46,18 +46,18 @@ void _impl_k_thread_abort(k_tid_t thread)
 		}
 
 		/* The abort handler might have altered the ready queue. */
-		_reschedule_threads(key);
+		_reschedule(key);
 	}
 }
 #endif
 
 #ifdef CONFIG_USERSPACE
-_SYSCALL_HANDLER(k_thread_abort, thread_p)
+Z_SYSCALL_HANDLER(k_thread_abort, thread_p)
 {
 	struct k_thread *thread = (struct k_thread *)thread_p;
-	_SYSCALL_OBJ(thread, K_OBJ_THREAD);
-	_SYSCALL_VERIFY_MSG(!(thread->base.user_options & K_ESSENTIAL),
-		"aborting essential thread %p", thread);
+	Z_OOPS(Z_SYSCALL_OBJ(thread, K_OBJ_THREAD));
+	Z_OOPS(Z_SYSCALL_VERIFY_MSG(!(thread->base.user_options & K_ESSENTIAL),
+				    "aborting essential thread %p", thread));
 
 	_impl_k_thread_abort((struct k_thread *)thread);
 	return 0;

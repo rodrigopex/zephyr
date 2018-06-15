@@ -20,8 +20,8 @@
 #define FIRMWARE_UPDATE_ID			2
 #define FIRMWARE_STATE_ID			3
 #define FIRMWARE_UPDATE_RESULT_ID		5
-#define FIRMWARE_PACKAGE_NAME_ID		6 /* TODO */
-#define FIRMWARE_PACKAGE_VERSION_ID		7 /* TODO */
+#define FIRMWARE_PACKAGE_NAME_ID		6
+#define FIRMWARE_PACKAGE_VERSION_ID		7
 #define FIRMWARE_UPDATE_PROTO_SUPPORT_ID	8 /* TODO */
 #define FIRMWARE_UPDATE_DELIV_METHOD_ID		9
 
@@ -47,6 +47,9 @@ static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_EXECUTE(FIRMWARE_UPDATE_ID),
 	OBJ_FIELD_DATA(FIRMWARE_STATE_ID, R, U8),
 	OBJ_FIELD_DATA(FIRMWARE_UPDATE_RESULT_ID, R, U8),
+	OBJ_FIELD_DATA(FIRMWARE_PACKAGE_NAME_ID, R_OPT, STRING),
+	OBJ_FIELD_DATA(FIRMWARE_PACKAGE_VERSION_ID, R_OPT, STRING),
+	OBJ_FIELD(FIRMWARE_UPDATE_PROTO_SUPPORT_ID, R_OPT, U8, 0),
 	OBJ_FIELD_DATA(FIRMWARE_UPDATE_DELIV_METHOD_ID, R, U8)
 };
 
@@ -336,7 +339,7 @@ static int lwm2m_firmware_init(struct device *dev)
 
 	firmware.obj_id = LWM2M_OBJECT_FIRMWARE_ID;
 	firmware.fields = fields;
-	firmware.field_count = sizeof(fields) / sizeof(*fields);
+	firmware.field_count = ARRAY_SIZE(fields);
 	firmware.max_instance_count = 1;
 	firmware.create_cb = firmware_create;
 	lwm2m_register_obj(&firmware);

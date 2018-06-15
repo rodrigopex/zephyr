@@ -631,14 +631,13 @@ static struct bt_gatt_attr prov_attrs[] = {
 	BT_GATT_PRIMARY_SERVICE(BT_UUID_MESH_PROV),
 
 	BT_GATT_CHARACTERISTIC(BT_UUID_MESH_PROV_DATA_IN,
-			       BT_GATT_CHRC_WRITE_WITHOUT_RESP),
-	BT_GATT_DESCRIPTOR(BT_UUID_MESH_PROV_DATA_IN, BT_GATT_PERM_WRITE,
-			   NULL, proxy_recv, (void *)1),
+			       BT_GATT_CHRC_WRITE_WITHOUT_RESP,
+			       BT_GATT_PERM_WRITE, NULL, proxy_recv,
+			       (void *)1),
 
 	BT_GATT_CHARACTERISTIC(BT_UUID_MESH_PROV_DATA_OUT,
-			       BT_GATT_CHRC_NOTIFY),
-	BT_GATT_DESCRIPTOR(BT_UUID_MESH_PROV_DATA_OUT, BT_GATT_PERM_NONE,
-			   NULL, NULL, NULL),
+			       BT_GATT_CHRC_NOTIFY, BT_GATT_PERM_NONE,
+			       NULL, NULL, NULL),
 	/* Add custom CCC as clients need to be tracked individually */
 	BT_GATT_DESCRIPTOR(BT_UUID_GATT_CCC,
 			   BT_GATT_PERM_WRITE | BT_GATT_PERM_READ,
@@ -738,14 +737,14 @@ static struct bt_gatt_attr proxy_attrs[] = {
 	BT_GATT_PRIMARY_SERVICE(BT_UUID_MESH_PROXY),
 
 	BT_GATT_CHARACTERISTIC(BT_UUID_MESH_PROXY_DATA_IN,
-			       BT_GATT_CHRC_WRITE_WITHOUT_RESP),
-	BT_GATT_DESCRIPTOR(BT_UUID_MESH_PROXY_DATA_IN, BT_GATT_PERM_WRITE,
-			   NULL, proxy_recv, NULL),
+			       BT_GATT_CHRC_WRITE_WITHOUT_RESP,
+			       BT_GATT_PERM_WRITE,
+			       NULL, proxy_recv, NULL),
 
 	BT_GATT_CHARACTERISTIC(BT_UUID_MESH_PROXY_DATA_OUT,
-			       BT_GATT_CHRC_NOTIFY),
-	BT_GATT_DESCRIPTOR(BT_UUID_MESH_PROXY_DATA_OUT, BT_GATT_PERM_NONE,
-			   NULL, NULL, NULL),
+			       BT_GATT_CHRC_NOTIFY,
+			       BT_GATT_PERM_NONE,
+			       NULL, NULL, NULL),
 	/* Add custom CCC as clients need to be tracked individually */
 	BT_GATT_DESCRIPTOR(BT_UUID_GATT_CCC,
 			   BT_GATT_PERM_READ | BT_GATT_PERM_WRITE,
@@ -886,13 +885,13 @@ static int proxy_send(struct bt_conn *conn, const void *data, u16_t len)
 
 #if defined(CONFIG_BT_MESH_GATT_PROXY)
 	if (gatt_svc == MESH_GATT_PROXY) {
-		return bt_gatt_notify(conn, &proxy_attrs[4], data, len);
+		return bt_gatt_notify(conn, &proxy_attrs[3], data, len);
 	}
 #endif
 
 #if defined(CONFIG_BT_MESH_PB_GATT)
 	if (gatt_svc == MESH_GATT_PROV) {
-		return bt_gatt_notify(conn, &prov_attrs[4], data, len);
+		return bt_gatt_notify(conn, &prov_attrs[3], data, len);
 	}
 #endif
 

@@ -27,6 +27,7 @@
 				compatible = "soc-nv-flash";
 				label = "NRF_FLASH";
 				reg = <0x00000000 DT_FLASH_SIZE>;
+				erase-block-size = <4096>;
 				write-block-size = <4>;
 			};
 	};
@@ -52,6 +53,35 @@
 			interrupts = <40 1>;
 			status = "disabled";
 			label = "UART_1";
+		};
+
+		gpiote: gpiote@40006000 {
+			compatible = "nordic,nrf5-gpiote";
+			reg = <0x40006000 0x1000>;
+			interrupts = <6 5>;
+			interrupt-names = "gpiote";
+			status = "disabled";
+			label = "GPIOTE_0";
+		};
+
+		gpio0: gpio@50000000 {
+			compatible = "nordic,nrf5-gpio";
+			gpio-controller;
+			reg = <0x50000000 0x200
+			       0x50000500 0x300>;
+			#gpio-cells = <2>;
+			label = "GPIO_0";
+			status = "disabled";
+		};
+
+		gpio1: gpio@50000300 {
+			compatible = "nordic,nrf5-gpio";
+			gpio-controller;
+			reg = <0x50000300 0x200
+			       0x50000800 0x300>;
+			#gpio-cells = <2>;
+			label = "GPIO_1";
+			status = "disabled";
 		};
 
 		i2c0: i2c@40003000 {
@@ -88,6 +118,14 @@
 			num-isoout-endpoints = <1>;
 			status = "disabled";
 			label = "USBD";
+		};
+
+		wdt: watchdog@40010000 {
+			compatible = "nordic,nrf-watchdog";
+			reg = <0x40010000 0x1000>;
+			interrupts = <16 1>;
+			interrupt-names = "wdt";
+			label = "WDT";
 		};
 	};
 };

@@ -8,7 +8,36 @@
 if BOARD_DISCO_L475_IOT1
 
 config BOARD
-	default disco_l475_iot1
+	default "disco_l475_iot1"
+
+if CLOCK_STM32_SYSCLK_SRC_PLL
+
+if CLOCK_STM32_PLL_SRC_HSI
+# produce 80MHz clock at PLL output
+
+config SYS_CLOCK_HW_CYCLES_PER_SEC
+	default 80000000
+config CLOCK_STM32_PLL_M_DIVISOR
+	default 1
+config CLOCK_STM32_PLL_N_MULTIPLIER
+	default 20
+config CLOCK_STM32_PLL_P_DIVISOR
+	default 7
+config CLOCK_STM32_PLL_Q_DIVISOR
+	default 2
+config CLOCK_STM32_PLL_R_DIVISOR
+	default 4
+
+endif # CLOCK_STM32_PLL_SRC_HSI
+
+endif # CLOCK_STM32_SYSCLK_SRC_PLL
+
+if CLOCK_STM32_SYSCLK_SRC_MSI
+
+config SYS_CLOCK_HW_CYCLES_PER_SEC
+	default 16000000
+
+endif # CLOCK_STM32_SYSCLK_SRC_MSI
 
 if UART_CONSOLE
 
@@ -48,6 +77,9 @@ config PWM_STM32_2
 endif # PWM
 
 if VL53L0X
+
+config VL53L0X_XSHUT_CONTROL_ENABLE
+	default y
 
 config VL53L0X_XSHUT_GPIO_DEV_NAME
 	default "GPIOC"

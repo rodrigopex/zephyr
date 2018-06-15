@@ -82,6 +82,7 @@ config USERSPACE
 config PRIVILEGED_STACK_SIZE
 	int "Size of privileged stack"
 	default 256
+	default 384 if ARC
 	depends on ARCH_HAS_USERSPACE
 	help
 	  This option sets the privileged stack region size that will be used
@@ -105,6 +106,20 @@ config MAX_THREAD_BYTES
 	  thread permissions for that object. This controls the size of the
 	  bitfield (in bytes) and imposes a limit on how many threads can
 	  be created in the system.
+
+config DYNAMIC_OBJECTS
+	bool "Allow kernel objects to be allocated at runtime"
+	default n
+	depends on USERSPACE
+	help
+	Enabling this option allows for kernel objects to be requested from
+	the calling thread's resource pool, at a slight cost in performance
+	due to the supplemental run-time tables required to validate such
+	objects.
+
+	Objects allocated in this way can be freed with a supervisor-only
+	API call, or when the number of references to that object drops to
+	zero.
 
 config SIMPLE_FATAL_ERROR_HANDLER
 	prompt "Simple system fatal error handler"
@@ -318,6 +333,7 @@ config BOARD
 	  arch/<arch>/soc/<family>/<series>
 
 
-source "arch/$ENV_VAR_SYM_ARCH/Kconfig"
+# $ENV_VAR_ARCH might be a glob pattern
+gsource "arch/$ENV_VAR_ARCH/Kconfig"
 
 source "boards/Kconfig"

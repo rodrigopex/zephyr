@@ -46,12 +46,12 @@ static float32_value_t max_range_value[MAX_INSTANCE_COUNT];
 static struct lwm2m_engine_obj temp_sensor;
 static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_DATA(TEMP_SENSOR_VALUE_ID, R, FLOAT32),
-	OBJ_FIELD_DATA(TEMP_UNITS_ID, R, STRING),
-	OBJ_FIELD_DATA(TEMP_MIN_MEASURED_VALUE_ID, R, FLOAT32),
-	OBJ_FIELD_DATA(TEMP_MAX_MEASURED_VALUE_ID, R, FLOAT32),
-	OBJ_FIELD_DATA(TEMP_MIN_RANGE_VALUE_ID, R, FLOAT32),
-	OBJ_FIELD_DATA(TEMP_MAX_RANGE_VALUE_ID, R, FLOAT32),
-	OBJ_FIELD_EXECUTE(TEMP_RESET_MIN_MAX_MEASURED_VALUES_ID),
+	OBJ_FIELD_DATA(TEMP_UNITS_ID, R_OPT, STRING),
+	OBJ_FIELD_DATA(TEMP_MIN_MEASURED_VALUE_ID, R_OPT, FLOAT32),
+	OBJ_FIELD_DATA(TEMP_MAX_MEASURED_VALUE_ID, R_OPT, FLOAT32),
+	OBJ_FIELD_DATA(TEMP_MIN_RANGE_VALUE_ID, R_OPT, FLOAT32),
+	OBJ_FIELD_DATA(TEMP_MAX_RANGE_VALUE_ID, R_OPT, FLOAT32),
+	OBJ_FIELD_EXECUTE_OPT(TEMP_RESET_MIN_MAX_MEASURED_VALUES_ID),
 };
 
 static struct lwm2m_engine_obj_inst inst[MAX_INSTANCE_COUNT];
@@ -209,7 +209,7 @@ static int ipso_temp_sensor_init(struct device *dev)
 
 	temp_sensor.obj_id = IPSO_OBJECT_TEMP_SENSOR_ID;
 	temp_sensor.fields = fields;
-	temp_sensor.field_count = sizeof(fields) / sizeof(*fields);
+	temp_sensor.field_count = ARRAY_SIZE(fields);
 	temp_sensor.max_instance_count = MAX_INSTANCE_COUNT;
 	temp_sensor.create_cb = temp_sensor_create;
 	lwm2m_register_obj(&temp_sensor);

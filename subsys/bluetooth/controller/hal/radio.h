@@ -5,9 +5,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef _RADIO_H_
-#define _RADIO_H_
-
 typedef void (*radio_isr_fp) (void);
 
 void isr_radio(void);
@@ -17,6 +14,7 @@ void radio_setup(void);
 void radio_reset(void);
 void radio_phy_set(u8_t phy, u8_t flags);
 void radio_tx_power_set(u32_t power);
+void radio_tx_power_max_set(void);
 void radio_freq_chan_set(u32_t chan);
 void radio_whiten_iv_set(u32_t iv);
 void radio_aa_set(u8_t *aa);
@@ -98,5 +96,3 @@ void radio_ar_configure(u32_t nirk, void *irk);
 u32_t radio_ar_match_get(void);
 void radio_ar_status_reset(void);
 u32_t radio_ar_has_match(void);
-
-#endif

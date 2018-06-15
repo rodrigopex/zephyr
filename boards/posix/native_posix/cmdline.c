@@ -5,11 +5,14 @@
  */
 
 #include <stdbool.h>
+#include <string.h>
 #include "cmdline_common.h"
 #include "zephyr/types.h"
 #include "hw_models_top.h"
+#include "timer_model.h"
 #include "cmdline.h"
 #include "toolchain.h"
+#include "board.h"
 
 static int s_argc, test_argc;
 static char **s_argv, **test_argv;
@@ -26,13 +29,43 @@ static void cmd_stop_at_found(char *argv, int offset)
 	hwm_set_end_of_time(args.stop_at*1e6);
 }
 
-#if defined(CONFIG_ENTROPY_NATIVE_POSIX)
+static void cmd_realtime_found(char *argv, int offset)
+{
+	ARG_UNUSED(argv);
+	ARG_UNUSED(offset);
+	hwtimer_set_real_time(true);
+}
+
+static void cmd_no_realtime_found(char *argv, int offset)
+{
+	ARG_UNUSED(argv);
+	ARG_UNUSED(offset);
+	hwtimer_set_real_time(false);
+}
+
+#if defined(CONFIG_FAKE_ENTROPY_NATIVE_POSIX)
 extern void entropy_native_posix_set_seed(unsigned int seed_i);
 static void cmd_seed_found(char *argv, int offset)
 {
 	ARG_UNUSED(argv);
 	ARG_UNUSED(offset);
 	entropy_native_posix_set_seed(args.seed);
+}
+#endif
+
+#if defined(CONFIG_BT_USERCHAN)
+int bt_dev_index = -1;
+
+static void cmd_bt_dev_found(char *argv, int offset)
+{
+	if (strncmp(&argv[offset], "hci", 3) || strlen(&argv[offset]) < 4) {
+		posix_print_error_and_exit("Error: Invalid Bluetooth device "
+					   "name '%s' (should be e.g. hci0)\n",
+					   &argv[offset]);
+		return;
+	}
+
+	bt_dev_index = strtol(&argv[offset + 3], NULL, 10);
 }
 #endif
 
@@ -53,17 +86,36 @@ void native_handle_cmd_line(int argc, char *argv[])
 		 * destination, callback,
 		 * description
 		 */
+		{false, false, true,
+		"rt", "", 'b',
+		NULL, cmd_realtime_found,
+		"Slow down the execution to the host real time"},
+
+		{false, false, true,
+		"no-rt", "", 'b',
+		NULL, cmd_no_realtime_found,
+		"Do NOT slow down the execution to real time, but advance "
+		"Zephyr's time as fast as possible and decoupled from the host "
+		"time"},
+
 		{false, false, false,
-		  "stop_at", "time", 'd',
+		 "stop_at", "time", 'd',
 		(void *)&args.stop_at, cmd_stop_at_found,
 		"In simulated seconds, when to stop automatically"},
 
-#if defined(CONFIG_ENTROPY_NATIVE_POSIX)
+#if defined(CONFIG_FAKE_ENTROPY_NATIVE_POSIX)
 		{false, false, false,
 		  "seed", "r_seed", 'u',
 		(void *)&args.seed, cmd_seed_found,
 		"A 32-bit integer seed value for the entropy device, such as "
 		"97229 (decimal), 0x17BCD (hex), or 0275715 (octal)"},
+#endif
+
+#if defined(CONFIG_BT_USERCHAN)
+		{ false, true, false,
+		  "bt-dev", "hciX", 's',
+		  NULL, cmd_bt_dev_found,
+		"A local HCI device to be used for Bluetooth (e.g. hci0)" },
 #endif
 
 		{true, false, false,
@@ -94,6 +146,13 @@ void native_handle_cmd_line(int argc, char *argv[])
 						   argv[i]);
 		}
 	}
+
+#if defined(CONFIG_BT_USERCHAN)
+	if (bt_dev_index < 0) {
+		posix_print_error_and_exit("Error: Bluetooth device missing. "
+					   "Specify one using --bt-dev=hciN\n");
+	}
+#endif
 }
 
 /**

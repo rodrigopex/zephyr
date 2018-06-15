@@ -80,8 +80,8 @@ static void test_rw_lock(void)
 
 	/* Creating N premptive threads in increasing order of priority */
 	for (i = 0; i < N_THR; i++) {
-		pthread_attr_destroy(&attr[i]);
-		pthread_attr_init(&attr[i]);
+		zassert_equal(pthread_attr_init(&attr[i]), 0,
+			      "Unable to create pthread object attrib");
 
 		/* Setting scheduling priority */
 		schedparam.priority = i + 1;
@@ -92,7 +92,7 @@ static void test_rw_lock(void)
 
 		ret = pthread_create(&newthread[i], &attr[i], thread_top,
 				     (void *)i);
-		zassert_false(ret, "Low memory to thread new thread\n");
+		zassert_false(ret, "Low memory to thread new thread");
 
 	}
 
@@ -135,7 +135,7 @@ static void test_rw_lock(void)
 
 	for (i = 0; i < N_THR; i++) {
 		zassert_false(pthread_join(newthread[i], &status),
-			      "Failed to join\n");
+			      "Failed to join");
 	}
 
 	zassert_false(pthread_rwlock_destroy(&rwlock),

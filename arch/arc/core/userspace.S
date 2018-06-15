@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Synopsys.
+ * Copyright (c) 2018 Synopsys.
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -10,42 +10,38 @@
 #include <kernel_structs.h>
 #include <arch/cpu.h>
 #include <syscall.h>
+#include <swap_macros.h>
 
 .macro clear_scratch_regs
-	mov	r1, 0
-	mov 	r2, 0
-	mov	r3, 0
-	mov	r4, 0
-	mov	r5, 0
-	mov	r6, 0
-	mov	r7, 0
-	mov	r8, 0
-	mov 	r9, 0
-	mov	r10, 0
-	mov	r11, 0
-	mov	r12, 0
-
-	mov 	fp, 0
-	mov 	r29, 0
-	mov 	r30, 0
-	mov	blink, 0
+	mov r1, 0
+	mov r2, 0
+	mov r3, 0
+	mov r4, 0
+	mov r5, 0
+	mov r6, 0
+	mov r7, 0
+	mov r8, 0
+	mov r9, 0
+	mov r10, 0
+	mov r11, 0
+	mov r12, 0
 .endm
 
 .macro clear_callee_regs
-	mov	r25, 0
-	mov	r24, 0
-	mov	r23, 0
-	mov	r22, 0
-	mov	r21, 0
-	mov	r20, 0
-	mov	r19, 0
-	mov	r18, 0
-	mov	r17, 0
-	mov	r16, 0
+	mov r25, 0
+	mov r24, 0
+	mov r23, 0
+	mov r22, 0
+	mov r21, 0
+	mov r20, 0
+	mov r19, 0
+	mov r18, 0
+	mov r17, 0
+	mov r16, 0
 
-	mov	r15, 0
-	mov	r14, 0
-	mov	r13, 0
+	mov r15, 0
+	mov r14, 0
+	mov r13, 0
 .endm
 
 GTEXT(_arc_userspace_enter)
@@ -71,7 +67,7 @@ SECTION_FUNC(TEXT, _user_thread_entry_wrapper)
 	ld r4, [r1, ___thread_stack_info_t_start_OFFSET]
 
 /*
- * when CONFIG_INIT_STACK is enable, stack will be initialized
+ * when CONFIG_INIT_STACKS is enable, stack will be initialized
  * in _new_thread_init.
  */
 	j _arc_go_to_user_space
@@ -89,6 +85,12 @@ SECTION_FUNC(TEXT, _arc_userspace_enter)
 	/*
 	 * In ARCv2, the U bit can only be set through exception return
 	 */
+#ifdef CONFIG_ARC_STACK_CHECKING
+	/* disable stack checking during swap */
+	lr blink, [_ARC_V2_STATUS32]
+	bclr blink, blink, _ARC_V2_STATUS32_SC_BIT
+	kflag blink
+#endif
 	/* the end of user stack in r5 */
 	add r5, r4, r5
 	/* start of privilege stack */
@@ -111,6 +113,17 @@ _clear_user_stack:
 	st.ab r0, [r4, 4]
 	cmp r4, r5
 	jlt _clear_user_stack
+
+#ifdef CONFIG_ARC_STACK_CHECKING
+	mov r1, _kernel
+	ld_s r2, [r1, _kernel_offset_to_current]
+
+	_load_stack_check_regs
+
+	lr r0, [_ARC_V2_STATUS32]
+	bset r0, r0, _ARC_V2_STATUS32_SC_BIT
+	kflag r0
+#endif
 
 _arc_go_to_user_space:
 	lr r0, [_ARC_V2_STATUS32]
@@ -144,6 +157,11 @@ _arc_go_to_user_space:
 
 	clear_scratch_regs
 
+	mov fp, 0
+	mov r29, 0
+	mov r30, 0
+	mov blink, 0
+
 	rtie
 
 /**
@@ -166,24 +184,30 @@ SECTION_FUNC(TEXT, _arc_do_syscall)
 
 	jl [r6]
 
+	/*
+	 * no need to clear callee regs, as they will be saved and restored
+	 * automatically
+	 */
+	clear_scratch_regs
+
+	mov r29, 0
+	mov r30, 0
+
 	pop_s blink
 
 	/* through fake exception return, go back to the caller */
 	kflag _ARC_V2_STATUS32_AE
 
-#ifdef CONFIG_ARC_HAS_SECURE
-	lr r6, [_ARC_V2_SEC_STAT]
-	/* the mode returns from exception return is secure mode */
-	bset r6, r6, 31
-	sr r6, [_ARC_V2_ERSEC_STAT]
-#endif
-	/* the status and return addesss are saved in trap_s handler */
+	/* the status and return address are saved in trap_s handler */
 	pop r6
 	sr r6, [_ARC_V2_ERSTATUS]
 	pop r6
 	sr r6, [_ARC_V2_ERET]
+#ifdef CONFIG_ARC_HAS_SECURE
+	pop r6
+	sr r6, [_ARC_V2_ERSEC_STAT]
+#endif
 
-	/* no nned to clear callee regs */
-	clear_scratch_regs
+	mov r6, 0
 
 	rtie

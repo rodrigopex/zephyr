@@ -26,6 +26,7 @@
 #include <net/net_pkt.h>
 #include <net/net_ip.h>
 #include <net/net_context.h>
+#include <net/tcp.h>
 #include <misc/byteorder.h>
 
 #include "connection.h"
@@ -33,10 +34,10 @@
 
 #include "ipv6.h"
 #include "ipv4.h"
-#include "tcp.h"
+#include "tcp_internal.h"
 #include "net_stats.h"
 
-#define ALLOC_TIMEOUT 500
+#define ALLOC_TIMEOUT K_MSEC(500)
 
 /*
  * Each TCP connection needs to be tracked by net_context, so
@@ -54,21 +55,11 @@ static struct tcp_backlog_entry {
 	struct k_delayed_work ack_timer;
 } tcp_backlog[CONFIG_NET_TCP_BACKLOG_SIZE];
 
-/* 2MSL timeout, where "MSL" is arbitrarily 2 minutes in the RFC */
-#if defined(CONFIG_NET_TCP_2MSL_TIME)
-#define TIME_WAIT_MS K_SECONDS(CONFIG_NET_TCP_2MSL_TIME)
-#else
-#define TIME_WAIT_MS K_SECONDS(2 * 2 * 60)
-#endif
-
 #if defined(CONFIG_NET_TCP_ACK_TIMEOUT)
 #define ACK_TIMEOUT CONFIG_NET_TCP_ACK_TIMEOUT
 #else
 #define ACK_TIMEOUT K_SECONDS(1)
 #endif
-
-/* TODO: It should be 2 * MSL (Maximum segment lifetime) */
-#define TIMEWAIT_TIMEOUT MSEC(250)
 
 #define FIN_TIMEOUT K_SECONDS(1)
 
@@ -250,7 +241,7 @@ static void tcp_retry_expired(struct k_work *work)
 							net_pkt_iface(pkt));
 			}
 		}
-	} else if (IS_ENABLED(CONFIG_NET_TCP_TIME_WAIT)) {
+	} else if (CONFIG_NET_TCP_TIME_WAIT_DELAY != 0) {
 		if (tcp->fin_sent && tcp->fin_rcvd) {
 			NET_DBG("[%p] Closing connection (context %p)",
 				tcp, tcp->context);
@@ -769,7 +760,7 @@ int net_tcp_prepare_reset(struct net_tcp *tcp,
 
 const char *net_tcp_state_str(enum net_tcp_state state)
 {
-#if defined(CONFIG_NET_DEBUG_TCP)
+#if defined(CONFIG_NET_DEBUG_TCP) || defined(CONFIG_NET_SHELL)
 	switch (state) {
 	case NET_TCP_CLOSED:
 		return "CLOSED";
@@ -947,12 +938,13 @@ static void restart_timer(struct net_tcp *tcp)
 		tcp->flags |= NET_TCP_RETRYING;
 		tcp->retry_timeout_shift = 0;
 		k_delayed_work_submit(&tcp->retry_timer, retry_timeout(tcp));
-	} else if (IS_ENABLED(CONFIG_NET_TCP_TIME_WAIT)) {
+	} else if (CONFIG_NET_TCP_TIME_WAIT_DELAY != 0) {
 		if (tcp->fin_sent && tcp->fin_rcvd) {
 			/* We know sent_list is empty, which means if
 			 * fin_sent is true it must have been ACKd
 			 */
-			k_delayed_work_submit(&tcp->retry_timer, TIME_WAIT_MS);
+			k_delayed_work_submit(&tcp->retry_timer,
+					      CONFIG_NET_TCP_TIME_WAIT_DELAY);
 			net_context_ref(tcp->context);
 		}
 	} else {
@@ -1730,7 +1722,7 @@ static void handle_timewait_timeout(struct k_work *work)
 	struct net_tcp *tcp = CONTAINER_OF(work, struct net_tcp,
 					   timewait_timer);
 
-	NET_DBG("Timewait expired in %dms", TIMEWAIT_TIMEOUT);
+	NET_DBG("Timewait expired in %dms", CONFIG_NET_TCP_TIME_WAIT_DELAY);
 
 	if (net_tcp_get_state(tcp) == NET_TCP_TIME_WAIT) {
 		net_tcp_change_state(tcp, NET_TCP_CLOSED);
@@ -1838,12 +1830,20 @@ static inline int send_syn_segment(struct net_context *context,
 {
 	struct net_pkt *pkt = NULL;
 	int ret;
+	u8_t options[NET_TCP_MAX_OPT_SIZE];
+	u8_t optionlen = 0;
 
-	ret = net_tcp_prepare_segment(context->tcp, flags, NULL, 0,
+	if (flags == NET_TCP_SYN) {
+		net_tcp_set_syn_opt(context->tcp, options, &optionlen);
+	}
+
+	ret = net_tcp_prepare_segment(context->tcp, flags, options, optionlen,
 				      local, remote, &pkt);
 	if (ret) {
 		return ret;
 	}
+
+	print_send_info(pkt, msg);
 
 	ret = net_send_data(pkt);
 	if (ret < 0) {
@@ -1852,8 +1852,6 @@ static inline int send_syn_segment(struct net_context *context,
 	}
 
 	context->tcp->send_seq++;
-
-	print_send_info(pkt, msg);
 
 	return ret;
 }
@@ -1962,6 +1960,7 @@ NET_CONN_CB(tcp_established)
 		/* RFC793 specifies that "highest" (i.e. current from our PoV)
 		 * ack # value can/should be sent, so we just force resend.
 		 */
+resend_ack:
 		send_ack(context, &conn->remote_addr, true);
 		return NET_DROP;
 	}
@@ -2052,6 +2051,18 @@ NET_CONN_CB(tcp_established)
 
 	data_len = net_pkt_appdatalen(pkt);
 	if (data_len > net_tcp_get_recv_wnd(context->tcp)) {
+		/* In case we have zero window, we should still accept
+		 * Zero Window Probes from peer, which per convention
+		 * come with len=1. Note that normally we need to check
+		 * for net_tcp_get_recv_wnd(context->tcp) == 0, but
+		 * given the if above, we know that if data_len == 1,
+		 * then net_tcp_get_recv_wnd(context->tcp) can be only 0
+		 * here.
+		 */
+		if (data_len == 1) {
+			goto resend_ack;
+		}
+
 		NET_ERR("Context %p: overflow of recv window (%d vs %d), "
 			"pkt dropped",
 			context, net_tcp_get_recv_wnd(context->tcp), data_len);
@@ -2079,7 +2090,7 @@ NET_CONN_CB(tcp_established)
 clean_up:
 	if (net_tcp_get_state(context->tcp) == NET_TCP_TIME_WAIT) {
 		k_delayed_work_submit(&context->tcp->timewait_timer,
-				      TIMEWAIT_TIMEOUT);
+				      CONFIG_NET_TCP_TIME_WAIT_DELAY);
 	}
 
 	if (net_tcp_get_state(context->tcp) == NET_TCP_CLOSED) {

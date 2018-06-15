@@ -31,8 +31,6 @@
 
 	gpio_keys {
 		compatible = "gpio-keys";
-		#address-cells = <1>;
-		#size-cells = <0>;
 		user_button: button@0 {
 			label = "Key";
 			gpios = <&gpioc 9 GPIO_INT_ACTIVE_LOW>;
@@ -75,4 +73,17 @@
 
 &spi2 {
 	status = "ok";
+};
+
+&usb {
+	status = "ok";
+	disconnect-gpios = <&gpioc 12 0>;
+};
+
+&timers1 {
+	status = "ok";
+
+	pwm {
+		status = "ok";
+	};
 };

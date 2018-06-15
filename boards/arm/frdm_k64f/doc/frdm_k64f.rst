@@ -76,6 +76,8 @@ The frdm_k64f board configuration supports the following hardware features:
 +-----------+------------+-------------------------------------+
 | SPI       | on-chip    | spi                                 |
 +-----------+------------+-------------------------------------+
+| WATCHDOG  | on-chip    | watchdog                            |
++-----------+------------+-------------------------------------+
 | ADC       | on-chip    | adc                                 |
 +-----------+------------+-------------------------------------+
 | PWM       | on-chip    | pwm                                 |
@@ -86,6 +88,8 @@ The frdm_k64f board configuration supports the following hardware features:
 |           |            | serial port-interrupt               |
 +-----------+------------+-------------------------------------+
 | FLASH     | on-chip    | soc flash                           |
++-----------+------------+-------------------------------------+
+| USB       | on-chip    | USB device                          |
 +-----------+------------+-------------------------------------+
 | SENSOR    | off-chip   | fxos8700 polling;                   |
 |           |            | fxos8700 trigger                    |
@@ -131,13 +135,13 @@ The K64F SoC has five pairs of pinmux/gpio controllers.
 +-------+-----------------+---------------------------+
 | PTC17 | UART3_TX        | UART BT HCI               |
 +-------+-----------------+---------------------------+
-| PTCD0 | SPI0_PCS0       | SPI                       |
+| PTD0  | SPI0_PCS0       | SPI                       |
 +-------+-----------------+---------------------------+
-| PTCD1 | SPI0_SCK        | SPI                       |
+| PTD1  | SPI0_SCK        | SPI                       |
 +-------+-----------------+---------------------------+
-| PTCD2 | SPI0_SOUT       | SPI                       |
+| PTD2  | SPI0_SOUT       | SPI                       |
 +-------+-----------------+---------------------------+
-| PTCD3 | SPI0_SIN        | SPI                       |
+| PTD3  | SPI0_SIN        | SPI                       |
 +-------+-----------------+---------------------------+
 | PTE24 | I2C0_SCL        | I2C / FXOS8700            |
 +-------+-----------------+---------------------------+
@@ -187,6 +191,13 @@ Serial Port
 
 The K64F SoC has six UARTs. One is configured for the console, another for BT
 HCI, and the remaining are not used.
+
+USB
+===
+
+The K64F SoC has a USB OTG (USBOTG) controller that supports both
+device and host functions through its micro USB connector (K64F USB).
+Only USB device function is supported in Zephyr at the moment.
 
 Programming and Debugging
 *************************

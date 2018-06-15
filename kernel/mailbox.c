@@ -17,7 +17,6 @@
 #include <wait_q.h>
 #include <misc/dlist.h>
 #include <init.h>
-#include <kswap.h>
 
 #if (CONFIG_NUM_MBOX_ASYNC_MSGS > 0)
 
@@ -104,8 +103,8 @@ SYS_INIT(init_mbox_module, PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_OBJECTS);
 
 void k_mbox_init(struct k_mbox *mbox_ptr)
 {
-	sys_dlist_init(&mbox_ptr->tx_msg_queue);
-	sys_dlist_init(&mbox_ptr->rx_msg_queue);
+	_waitq_init(&mbox_ptr->tx_msg_queue);
+	_waitq_init(&mbox_ptr->rx_msg_queue);
 	SYS_TRACING_OBJ_INIT(k_mbox, mbox_ptr);
 }
 
@@ -219,7 +218,7 @@ static void mbox_message_dispose(struct k_mbox_msg *rx_msg)
 	_set_thread_return_value(sending_thread, 0);
 	_mark_thread_as_not_pending(sending_thread);
 	_ready_thread(sending_thread);
-	_reschedule_threads(key);
+	_reschedule(key);
 }
 
 /**
@@ -240,7 +239,7 @@ static int mbox_message_put(struct k_mbox *mbox, struct k_mbox_msg *tx_msg,
 			     s32_t timeout)
 {
 	struct k_thread *sending_thread;
-	struct k_thread *receiving_thread, *next;
+	struct k_thread *receiving_thread;
 	struct k_mbox_msg *rx_msg;
 	unsigned int key;
 
@@ -254,14 +253,12 @@ static int mbox_message_put(struct k_mbox *mbox, struct k_mbox_msg *tx_msg,
 	/* search mailbox's rx queue for a compatible receiver */
 	key = irq_lock();
 
-	SYS_DLIST_FOR_EACH_CONTAINER_SAFE(&mbox->rx_msg_queue, receiving_thread,
-					  next, base.k_q_node) {
+	_WAIT_Q_FOR_EACH(&mbox->rx_msg_queue, receiving_thread) {
 		rx_msg = (struct k_mbox_msg *)receiving_thread->base.swap_data;
 
 		if (mbox_message_match(tx_msg, rx_msg) == 0) {
 			/* take receiver out of rx queue */
 			_unpend_thread(receiving_thread);
-			_abort_thread_timeout(receiving_thread);
 
 			/* ready receiver for execution */
 			_set_thread_return_value(receiving_thread, 0);
@@ -276,7 +273,7 @@ static int mbox_message_put(struct k_mbox *mbox, struct k_mbox_msg *tx_msg,
 			 * until the receiver consumes the message
 			 */
 			if (sending_thread->base.thread_state & _THREAD_DUMMY) {
-				_reschedule_threads(key);
+				_reschedule(key);
 				return 0;
 			}
 #endif
@@ -285,9 +282,8 @@ static int mbox_message_put(struct k_mbox *mbox, struct k_mbox_msg *tx_msg,
 			 * synchronous send: pend current thread (unqueued)
 			 * until the receiver consumes the message
 			 */
-			_remove_thread_from_ready_q(_current);
-			_mark_thread_as_pending(_current);
-			return _Swap(key);
+			return _pend_current_thread(key, NULL, K_FOREVER);
+
 		}
 	}
 
@@ -307,8 +303,7 @@ static int mbox_message_put(struct k_mbox *mbox, struct k_mbox_msg *tx_msg,
 #endif
 
 	/* synchronous send: sender waits on tx queue for receiver or timeout */
-	_pend_current_thread(&mbox->tx_msg_queue, timeout);
-	return _Swap(key);
+	return _pend_current_thread(key, &mbox->tx_msg_queue, timeout);
 }
 
 int k_mbox_put(struct k_mbox *mbox, struct k_mbox_msg *tx_msg, s32_t timeout)
@@ -425,7 +420,7 @@ static int mbox_message_data_check(struct k_mbox_msg *rx_msg, void *buffer)
 int k_mbox_get(struct k_mbox *mbox, struct k_mbox_msg *rx_msg, void *buffer,
 	       s32_t timeout)
 {
-	struct k_thread *sending_thread, *next;
+	struct k_thread *sending_thread;
 	struct k_mbox_msg *tx_msg;
 	unsigned int key;
 	int result;
@@ -436,15 +431,12 @@ int k_mbox_get(struct k_mbox *mbox, struct k_mbox_msg *rx_msg, void *buffer,
 	/* search mailbox's tx queue for a compatible sender */
 	key = irq_lock();
 
-	SYS_DLIST_FOR_EACH_CONTAINER_SAFE(&mbox->tx_msg_queue, sending_thread,
-					  next, base.k_q_node) {
-
+	_WAIT_Q_FOR_EACH(&mbox->tx_msg_queue, sending_thread) {
 		tx_msg = (struct k_mbox_msg *)sending_thread->base.swap_data;
 
 		if (mbox_message_match(tx_msg, rx_msg) == 0) {
 			/* take sender out of mailbox's tx queue */
 			_unpend_thread(sending_thread);
-			_abort_thread_timeout(sending_thread);
 
 			irq_unlock(key);
 
@@ -462,9 +454,8 @@ int k_mbox_get(struct k_mbox *mbox, struct k_mbox_msg *rx_msg, void *buffer,
 	}
 
 	/* wait until a matching sender appears or a timeout occurs */
-	_pend_current_thread(&mbox->rx_msg_queue, timeout);
 	_current->base.swap_data = rx_msg;
-	result = _Swap(key);
+	result = _pend_current_thread(key, &mbox->rx_msg_queue, timeout);
 
 	/* consume message data immediately, if needed */
 	if (result == 0) {

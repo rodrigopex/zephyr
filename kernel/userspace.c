@@ -8,11 +8,15 @@
 #include <kernel.h>
 #include <string.h>
 #include <misc/printk.h>
+#include <misc/rb.h>
 #include <kernel_structs.h>
 #include <sys_io.h>
 #include <ksched.h>
 #include <syscall.h>
 #include <syscall_handler.h>
+#include <device.h>
+#include <init.h>
+#include <logging/sys_log.h>
 
 #define MAX_THREAD_BITS		(CONFIG_MAX_THREAD_BYTES * 8)
 
@@ -24,61 +28,10 @@ const char *otype_to_str(enum k_objects otype)
 	 */
 #ifdef CONFIG_PRINTK
 	switch (otype) {
-	/* Core kernel objects */
-	case K_OBJ_ALERT:
-		return "k_alert";
-	case K_OBJ_MSGQ:
-		return "k_msgq";
-	case K_OBJ_MUTEX:
-		return "k_mutex";
-	case K_OBJ_PIPE:
-		return "k_pipe";
-	case K_OBJ_SEM:
-		return "k_sem";
-	case K_OBJ_STACK:
-		return "k_stack";
-	case K_OBJ_THREAD:
-		return "k_thread";
-	case K_OBJ_TIMER:
-		return "k_timer";
-	case K_OBJ__THREAD_STACK_ELEMENT:
-		return "k_thread_stack_t";
-
-	/* Driver subsystems */
-	case K_OBJ_DRIVER_ADC:
-		return "adc driver";
-	case K_OBJ_DRIVER_AIO_CMP:
-		return "aio comparator driver";
-	case K_OBJ_DRIVER_COUNTER:
-		return "counter driver";
-	case K_OBJ_DRIVER_CRYPTO:
-		return "crypto driver";
-	case K_OBJ_DRIVER_DMA:
-		return "dma driver";
-	case K_OBJ_DRIVER_FLASH:
-		return "flash driver";
-	case K_OBJ_DRIVER_GPIO:
-		return "gpio driver";
-	case K_OBJ_DRIVER_I2C:
-		return "i2c driver";
-	case K_OBJ_DRIVER_I2S:
-		return "i2s driver";
-	case K_OBJ_DRIVER_IPM:
-		return "ipm driver";
-	case K_OBJ_DRIVER_PINMUX:
-		return "pinmux driver";
-	case K_OBJ_DRIVER_PWM:
-		return "pwm driver";
-	case K_OBJ_DRIVER_ENTROPY:
-		return "entropy driver";
-	case K_OBJ_DRIVER_RTC:
-		return "realtime clock driver";
-	case K_OBJ_DRIVER_SENSOR:
-		return "sensor driver";
-	case K_OBJ_DRIVER_SPI:
-		return "spi driver";
-	case K_OBJ_DRIVER_UART:
-		return "uart driver";
+	/* otype-to-str.h is generated automatically during build by
+	 * gen_kobject_list.py
+	 */
+#include <otype-to-str.h>
 	default:
 		return "?";
 	}
@@ -94,6 +47,174 @@ struct perm_ctx {
 	struct k_thread *parent;
 };
 
+#ifdef CONFIG_DYNAMIC_OBJECTS
+struct dyn_obj {
+	struct _k_object kobj;
+	sys_dnode_t obj_list;
+	struct rbnode node; /* must be immediately before data member */
+	u8_t data[]; /* The object itself */
+};
+
+extern struct _k_object *_k_object_gperf_find(void *obj);
+extern void _k_object_gperf_wordlist_foreach(_wordlist_cb_func_t func,
+					     void *context);
+
+static int node_lessthan(struct rbnode *a, struct rbnode *b);
+
+/*
+ * Red/black tree of allocated kernel objects, for reasonably fast lookups
+ * based on object pointer values.
+ */
+static struct rbtree obj_rb_tree = {
+	.lessthan_fn = node_lessthan
+};
+
+/*
+ * Linked list of allocated kernel objects, for iteration over all allocated
+ * objects (and potentially deleting them during iteration).
+ */
+static sys_dlist_t obj_list = SYS_DLIST_STATIC_INIT(&obj_list);
+
+/*
+ * TODO: Write some hash table code that will replace both obj_rb_tree
+ * and obj_list.
+ */
+
+static size_t obj_size_get(enum k_objects otype)
+{
+	switch (otype) {
+#include <otype-to-size.h>
+	default:
+		return sizeof(struct device);
+	}
+}
+
+static int node_lessthan(struct rbnode *a, struct rbnode *b)
+{
+	return a < b;
+}
+
+static inline struct dyn_obj *node_to_dyn_obj(struct rbnode *node)
+{
+	return CONTAINER_OF(node, struct dyn_obj, node);
+}
+
+static struct dyn_obj *dyn_object_find(void *obj)
+{
+	struct rbnode *node;
+	struct dyn_obj *ret;
+	int key;
+
+	/* For any dynamically allocated kernel object, the object
+	 * pointer is just a member of the conatining struct dyn_obj,
+	 * so just a little arithmetic is necessary to locate the
+	 * corresponding struct rbnode
+	 */
+	node = (struct rbnode *)((char *)obj - sizeof(struct rbnode));
+
+	key = irq_lock();
+	if (rb_contains(&obj_rb_tree, node)) {
+		ret = node_to_dyn_obj(node);
+	} else {
+		ret = NULL;
+	}
+	irq_unlock(key);
+
+	return ret;
+}
+
+void *_impl_k_object_alloc(enum k_objects otype)
+{
+	struct dyn_obj *dyn_obj;
+	int key;
+
+	/* Stacks are not supported, we don't yet have mem pool APIs
+	 * to request memory that is aligned
+	 */
+	__ASSERT(otype > K_OBJ_ANY && otype < K_OBJ_LAST &&
+		 otype != K_OBJ__THREAD_STACK_ELEMENT,
+		 "bad object type requested");
+
+	dyn_obj = z_thread_malloc(sizeof(*dyn_obj) + obj_size_get(otype));
+	if (!dyn_obj) {
+		SYS_LOG_WRN("could not allocate kernel object");
+		return NULL;
+	}
+
+	dyn_obj->kobj.name = (char *)&dyn_obj->data;
+	dyn_obj->kobj.type = otype;
+	dyn_obj->kobj.flags = K_OBJ_FLAG_ALLOC;
+	memset(dyn_obj->kobj.perms, 0, CONFIG_MAX_THREAD_BYTES);
+
+	/* The allocating thread implicitly gets permission on kernel objects
+	 * that it allocates
+	 */
+	_thread_perms_set(&dyn_obj->kobj, _current);
+
+	key = irq_lock();
+	rb_insert(&obj_rb_tree, &dyn_obj->node);
+	sys_dlist_append(&obj_list, &dyn_obj->obj_list);
+	irq_unlock(key);
+
+	return dyn_obj->kobj.name;
+}
+
+void k_object_free(void *obj)
+{
+	struct dyn_obj *dyn_obj;
+	int key;
+
+	/* This function is intentionally not exposed to user mode.
+	 * There's currently no robust way to track that an object isn't
+	 * being used by some other thread
+	 */
+
+	key = irq_lock();
+	dyn_obj = dyn_object_find(obj);
+	if (dyn_obj) {
+		rb_remove(&obj_rb_tree, &dyn_obj->node);
+		sys_dlist_remove(&dyn_obj->obj_list);
+	}
+	irq_unlock(key);
+
+	if (dyn_obj) {
+		k_free(dyn_obj);
+	}
+}
+
+struct _k_object *_k_object_find(void *obj)
+{
+	struct _k_object *ret;
+
+	ret = _k_object_gperf_find(obj);
+
+	if (!ret) {
+		struct dyn_obj *dyn_obj;
+
+		dyn_obj = dyn_object_find(obj);
+		if (dyn_obj) {
+			ret = &dyn_obj->kobj;
+		}
+	}
+
+	return ret;
+}
+
+void _k_object_wordlist_foreach(_wordlist_cb_func_t func, void *context)
+{
+	int key;
+	struct dyn_obj *obj, *next;
+
+	_k_object_gperf_wordlist_foreach(func, context);
+
+	key = irq_lock();
+	SYS_DLIST_FOR_EACH_CONTAINER_SAFE(&obj_list, obj, next, obj_list) {
+		func(&obj->kobj, context);
+	}
+	irq_unlock(key);
+}
+#endif /* CONFIG_DYNAMIC_OBJECTS */
+
 static int thread_index_get(struct k_thread *t)
 {
 	struct _k_object *ko;
@@ -105,6 +226,44 @@ static int thread_index_get(struct k_thread *t)
 	}
 
 	return ko->data;
+}
+
+static void unref_check(struct _k_object *ko)
+{
+	for (int i = 0; i < CONFIG_MAX_THREAD_BYTES; i++) {
+		if (ko->perms[i]) {
+			return;
+		}
+	}
+
+	/* This object has no more references. Some objects may have
+	 * dynamically allocated resources, require cleanup, or need to be
+	 * marked as uninitailized when all references are gone. What
+	 * specifically needs to happen depends on the object type.
+	 */
+	switch (ko->type) {
+	case K_OBJ_PIPE:
+		k_pipe_cleanup((struct k_pipe *)ko->name);
+		break;
+	case K_OBJ_MSGQ:
+		k_msgq_cleanup((struct k_msgq *)ko->name);
+		break;
+	case K_OBJ_STACK:
+		k_stack_cleanup((struct k_stack *)ko->name);
+		break;
+	default:
+		break;
+	}
+
+#ifdef CONFIG_DYNAMIC_OBJECTS
+	if (ko->flags & K_OBJ_FLAG_ALLOC) {
+		struct dyn_obj *dyn_obj =
+			CONTAINER_OF(ko, struct dyn_obj, kobj);
+		rb_remove(&obj_rb_tree, &dyn_obj->node);
+		sys_dlist_remove(&dyn_obj->obj_list);
+		k_free(dyn_obj);
+	}
+#endif
 }
 
 static void wordlist_cb(struct _k_object *ko, void *ctx_ptr)
@@ -144,15 +303,22 @@ void _thread_perms_clear(struct _k_object *ko, struct k_thread *thread)
 	int index = thread_index_get(thread);
 
 	if (index != -1) {
+		int key = irq_lock();
+
 		sys_bitfield_clear_bit((mem_addr_t)&ko->perms, index);
+		unref_check(ko);
+		irq_unlock(key);
 	}
 }
 
 static void clear_perms_cb(struct _k_object *ko, void *ctx_ptr)
 {
 	int id = (int)ctx_ptr;
+	int key = irq_lock();
 
 	sys_bitfield_clear_bit((mem_addr_t)&ko->perms, id);
+	unref_check(ko);
+	irq_unlock(key);
 }
 
 void _thread_perms_all_clear(struct k_thread *thread)
@@ -218,13 +384,18 @@ void _impl_k_object_access_grant(void *object, struct k_thread *thread)
 	}
 }
 
-void _impl_k_object_access_revoke(void *object, struct k_thread *thread)
+void k_object_access_revoke(void *object, struct k_thread *thread)
 {
 	struct _k_object *ko = _k_object_find(object);
 
 	if (ko) {
 		_thread_perms_clear(ko, thread);
 	}
+}
+
+void _impl_k_object_release(void *object)
+{
+	k_object_access_revoke(object, _current);
 }
 
 void k_object_access_all_grant(void *object)

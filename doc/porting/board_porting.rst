@@ -147,3 +147,241 @@ guidelines should be followed when porting a board:
 - Propose and configure a default network interface.
 
 - Enable all GPIO ports.
+
+.. _setting_configuration_values:
+
+Setting configuration values
+============================
+
+Kconfig symbols can be set to their ``BOARD``-specific values in one of two
+ways. The right method to use depends on whether the symbol is *visible* or
+not.
+
+
+Visible and invisible Kconfig symbols
+-------------------------------------
+
+Kconfig symbols come in two varieties:
+
+- A Kconfig symbol defined with a prompt is *visible*, and can be configured from
+  the ``menuconfig`` configuration interface.
+
+- A Kconfig symbol defined without a prompt is *invisible*. The user has no
+  direct control over its value.
+
+Here are some examples of visible and invisible symbols:
+
+.. code-block:: none
+
+    config NOT_VISIBLE
+    	bool
+    	default FOO
+
+    config VISIBLE_1
+    	bool "Enable stuff"
+
+    config VISIBLE_2
+    	string
+    	prompt "Foo value"
+
+
+Configuring visible Kconfig symbols
+-----------------------------------
+
+Default ``BOARD``-specific configuration values for visible Kconfig symbols
+*should* be given in :file:`boards/ARCHITECTURE/BOARD/BOARD_defconfig`, which
+uses the standard Kconfig :file:`.config` file syntax.
+
+
+Configuring invisible Kconfig symbols
+-------------------------------------
+
+``BOARD``-specific configuration values for invisible Kconfig symbols *must* be
+given in :file:`boards/ARCHITECTURE/BOARD/Kconfig.defconfig`, which uses
+Kconfig syntax.
+
+.. note::
+
+    Assignments in :file:`.config` files have no effect on invisible symbols,
+    so this scheme is not just an organizational issue.
+
+Assigning values in :file:`Kconfig.defconfig` relies on being able to define a
+Kconfig symbol in multiple locations. As an example, say we want to set
+``FOO_WIDTH`` below to 32:
+
+.. code-block:: none
+
+    config FOO_WIDTH
+    	int
+
+To do this, we extend the definition of ``FOO_WIDTH`` as follows, in
+:file:`Kconfig.defconfig`:
+
+.. code-block:: none
+
+    if BOARD_MY_BOARD
+
+    config FOO_WIDTH
+    	default 32
+
+    endif
+
+.. note::
+
+    Since the type of the symbol (``int``) has already been given at the first
+    definition location, it does not need to be repeated here.
+
+``default`` properties from :file:`Kconfig.defconfig` files override
+``default`` properties given on the "base" definition of the symbol. Zephyr
+uses a custom Kconfig patch that makes Kconfig prefer later defaults, and
+includes any :file:`Kconfig.defconfig` file last. See the
+:ref:`zephyr-specific_kconfig_behavior_for_defaults` section.
+
+If you want a symbol to only be user-configurable on some boards, make its base
+definition have no prompt, and then add a prompt to it in the
+:file:`Kconfig.defconfig` files of the boards where it should be configurable.
+
+.. note::
+
+    Prompts added in :file:`Kconfig.defconfig` files show up at the location of
+    the :file:`Kconfig.defconfig` file in the ``menuconfig`` interface, rather
+    than at the location of the base definition of the symbol.
+
+Motivation
+----------
+
+One motivation for this scheme is to avoid making fixed ``BOARD``-specific
+settings configurable in the ``menuconfig`` interface. If all
+configuration were done via :file:`boards/ARCHITECTURE/BOARD/BOARD_defconfig`,
+all symbols would have to be visible, as values given in
+:file:`boards/ARCHITECTURE/BOARD/BOARD_defconfig` have no effect on invisible
+symbols.
+
+Having fixed settings be user-configurable might be confusing, and would allow
+the user to create broken configurations.
+
+.. _kconfig_extensions_and_changes:
+
+Kconfig extensions and changes
+==============================
+
+Zephyr uses the `Kconfiglib <https://github.com/ulfalizer/Kconfiglib>`_
+implementation of `Kconfig
+<https://www.kernel.org/doc/Documentation/kbuild/kconfig-language.txt>`_. It
+simplifies how environment variables are handled, and adds some extensions.
+
+Environment variables in ``source`` statements are expanded directly in
+Kconfiglib, meaning no ``option env="ENV_VAR"`` "bounce" symbols need to be
+defined. If you need compatibility with the C Kconfig tools for an out-of-tree
+Kconfig tree, you can still add such symbols, but they must have the same name
+as the corresponding environment variables.
+
+.. note::
+
+    As of writing, there are plans to remove ``option env`` from the C tools as
+    well.
+
+The following Kconfig extensions are available:
+
+- The ``gsource`` statement, which includes each file matching a given wildcard
+  pattern.
+
+  Consider the following example:
+
+  .. code-block:: none
+
+      gsource "foo/bar/*/Kconfig"
+
+  If the pattern ``foo/bar/*/Kconfig`` matches the files
+  :file:`foo/bar/baz/Kconfig` and :file:`foo/bar/qaz/Kconfig`, the statement
+  above is equivalent to the following two ``source`` statements:
+
+  .. code-block:: none
+
+      source "foo/bar/baz/Kconfig"
+      source "foo/bar/qaz/Kconfig"
+
+  .. note
+
+      The wildcard patterns accepted are the same as for the Python `glob
+      <https://docs.python.org/3/library/glob.html>`_ module.
+
+  If no files match the pattern, ``gsource`` has no effect. This means that
+  ``gsource`` also functions as an "optional" include statement (similar to
+  ``-include`` in Make):
+
+  .. code-block:: none
+
+      gsource "foo/include-if-exists"
+
+  .. note::
+
+     Wildcard patterns that do not include any wildcard symbols (e.g., ``*``)
+     only match exactly the filename given, and only match it if the file
+     exists.
+
+  It might help to think of *g* as standing for *generalized* rather than
+  *glob* in this case.
+
+  .. note::
+
+      Only use ``gsource`` if you need it. Trying to ``source`` a non-existent
+      file produces an error, while ``gsource`` silently ignores missing files.
+      ``source`` also makes it clearer which files are being included.
+
+- The ``rsource`` statement, which includes a file specified with a relative
+  path.
+
+  The path is relative to the directory of the :file:`Kconfig` file that has
+  the ``rsource`` statement.
+
+  As an example, assume that :file:`foo/Kconfig` is the top-level
+  :file:`Kconfig` file, and that :file:`foo/bar/Kconfig` has the following
+  statements:
+
+  .. code-block:: none
+
+      source "qaz/Kconfig1"
+      rsource "qaz/Kconfig2"
+
+  This will include the two files :file:`foo/qaz/Kconfig1` and
+  :file:`foo/bar/qaz/Kconfig2`.
+
+  ``rsource`` can be used to create :file:`Kconfig` "subtrees" that can be
+  moved around freely.
+
+- The ``grsource`` statement, which combines ``gsource`` and ``rsource``.
+
+  For example, the following statement will include :file:`Kconfig1` and
+  :file:`Kconfig2` from the current directory (if they exist):
+
+  .. code-block:: none
+
+      grsource "Kconfig[12]"
+
+.. _zephyr-specific_kconfig_behavior_for_defaults:
+
+Zephyr-specific Kconfig behavior for defaults
+=============================================
+
+Zephyr uses a Kconfig patch that gives later ``default``\ s precedence over
+earlier ``default``\ s. This is a significant change from standard Kconfig
+behavior, which is to pick the first ``default`` with a satisfied condition.
+
+Consider the following example:
+
+.. code-block:: none
+
+    config FOO
+        string
+        default "first" if n
+        default "second"
+        default "third" if n
+        default "fourth"
+        default "fifth" if n
+
+In unpatched Kconfig, this will give ``FOO`` the value ``"second"``, which is
+the first ``default`` with a satisfied condition.
+
+In Zephyr, this will give ``FOO`` the value ``"fourth"``, which is the last
+``default`` with a satisfied condition.

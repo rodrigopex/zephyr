@@ -171,6 +171,10 @@ static void settings_fcb_compress(struct settings_fcb *cf)
 		if (rc) {
 			continue;
 		}
+		if (!val1) {
+			/* No sense to copy empty entry from the oldest sector*/
+			continue;
+		}
 		loc2 = loc1;
 		copy = 1;
 		while (fcb_getnext(&cf->cf_fcb, &loc2.loc) == 0) {
@@ -204,7 +208,8 @@ static void settings_fcb_compress(struct settings_fcb *cf)
 		if (rc) {
 			continue;
 		}
-		fcb_append_finish(&cf->cf_fcb, &loc2.loc);
+		rc = fcb_append_finish(&cf->cf_fcb, &loc2.loc);
+		__ASSERT(rc == 0, "Failed to finish fcb_append.\n");
 	}
 	rc = fcb_rotate(&cf->cf_fcb);
 
@@ -233,8 +238,7 @@ static int settings_fcb_append(struct settings_fcb *cf, char *buf, int len)
 	if (rc) {
 		return -EINVAL;
 	}
-	fcb_append_finish(&cf->cf_fcb, &loc);
-	return 0;
+	return fcb_append_finish(&cf->cf_fcb, &loc);
 }
 
 static int settings_fcb_save(struct settings_store *cs, const char *name,

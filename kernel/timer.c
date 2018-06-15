@@ -9,7 +9,6 @@
 #include <init.h>
 #include <wait_q.h>
 #include <syscall_handler.h>
-#include <kswap.h>
 
 extern struct k_timer _k_timer_list_start[];
 extern struct k_timer _k_timer_list_end[];
@@ -69,20 +68,21 @@ void _timer_expiration_handler(struct _timeout *t)
 		timer->expiry_fn(timer);
 	}
 
-	thread = (struct k_thread *)sys_dlist_peek_head(&timer->wait_q);
+	thread = _waitq_head(&timer->wait_q);
 
 	if (!thread) {
 		return;
 	}
 
 	/*
-	 * Interrupts _DO NOT_ have to be locked in this specific instance of
-	 * calling _unpend_thread() because a) this is the only place a thread
-	 * can be taken off this pend queue, and b) the only place a thread
-	 * can be put on the pend queue is at thread level, which of course
-	 * cannot interrupt the current context.
+	 * Interrupts _DO NOT_ have to be locked in this specific
+	 * instance of thread unpending because a) this is the only
+	 * place a thread can be taken off this pend queue, and b) the
+	 * only place a thread can be put on the pend queue is at
+	 * thread level, which of course cannot interrupt the current
+	 * context.
 	 */
-	_unpend_thread(thread);
+	_unpend_thread_no_timeout(thread);
 
 	key = irq_lock();
 	_ready_thread(thread);
@@ -100,7 +100,7 @@ void k_timer_init(struct k_timer *timer,
 	timer->stop_fn = stop_fn;
 	timer->status = 0;
 
-	sys_dlist_init(&timer->wait_q);
+	_waitq_init(&timer->wait_q);
 	_init_timeout(&timer->timeout, _timer_expiration_handler);
 	SYS_TRACING_OBJ_INIT(k_timer, timer);
 
@@ -133,16 +133,16 @@ void _impl_k_timer_start(struct k_timer *timer, s32_t duration, s32_t period)
 }
 
 #ifdef CONFIG_USERSPACE
-_SYSCALL_HANDLER(k_timer_start, timer, duration_p, period_p)
+Z_SYSCALL_HANDLER(k_timer_start, timer, duration_p, period_p)
 {
 	s32_t duration, period;
 
 	duration = (s32_t)duration_p;
 	period = (s32_t)period_p;
 
-	_SYSCALL_VERIFY(duration >= 0 && period >= 0 &&
-			(duration != 0 || period != 0));
-	_SYSCALL_OBJ(timer, K_OBJ_TIMER);
+	Z_OOPS(Z_SYSCALL_VERIFY(duration >= 0 && period >= 0 &&
+				(duration != 0 || period != 0)));
+	Z_OOPS(Z_SYSCALL_OBJ(timer, K_OBJ_TIMER));
 	_impl_k_timer_start((struct k_timer *)timer, duration, period);
 	return 0;
 }
@@ -164,7 +164,7 @@ void _impl_k_timer_stop(struct k_timer *timer)
 	}
 
 	key = irq_lock();
-	struct k_thread *pending_thread = _unpend_first_thread(&timer->wait_q);
+	struct k_thread *pending_thread = _unpend1_no_timeout(&timer->wait_q);
 
 	if (pending_thread) {
 		_ready_thread(pending_thread);
@@ -173,12 +173,12 @@ void _impl_k_timer_stop(struct k_timer *timer)
 	if (_is_in_isr()) {
 		irq_unlock(key);
 	} else {
-		_reschedule_threads(key);
+		_reschedule(key);
 	}
 }
 
 #ifdef CONFIG_USERSPACE
-_SYSCALL_HANDLER1_SIMPLE_VOID(k_timer_stop, K_OBJ_TIMER, struct k_timer *);
+Z_SYSCALL_HANDLER1_SIMPLE_VOID(k_timer_stop, K_OBJ_TIMER, struct k_timer *);
 #endif
 
 u32_t _impl_k_timer_status_get(struct k_timer *timer)
@@ -193,7 +193,7 @@ u32_t _impl_k_timer_status_get(struct k_timer *timer)
 }
 
 #ifdef CONFIG_USERSPACE
-_SYSCALL_HANDLER1_SIMPLE(k_timer_status_get, K_OBJ_TIMER, struct k_timer *);
+Z_SYSCALL_HANDLER1_SIMPLE(k_timer_status_get, K_OBJ_TIMER, struct k_timer *);
 #endif
 
 u32_t _impl_k_timer_status_sync(struct k_timer *timer)
@@ -206,8 +206,7 @@ u32_t _impl_k_timer_status_sync(struct k_timer *timer)
 	if (result == 0) {
 		if (timer->timeout.delta_ticks_from_prev != _INACTIVE) {
 			/* wait for timer to expire or stop */
-			_pend_current_thread(&timer->wait_q, K_FOREVER);
-			_Swap(key);
+			_pend_current_thread(key, &timer->wait_q, K_FOREVER);
 
 			/* get updated timer status */
 			key = irq_lock();
@@ -226,7 +225,7 @@ u32_t _impl_k_timer_status_sync(struct k_timer *timer)
 }
 
 #ifdef CONFIG_USERSPACE
-_SYSCALL_HANDLER1_SIMPLE(k_timer_status_sync, K_OBJ_TIMER, struct k_timer *);
+Z_SYSCALL_HANDLER1_SIMPLE(k_timer_status_sync, K_OBJ_TIMER, struct k_timer *);
 #endif
 
 s32_t _timeout_remaining_get(struct _timeout *timeout)
@@ -257,12 +256,12 @@ s32_t _timeout_remaining_get(struct _timeout *timeout)
 }
 
 #ifdef CONFIG_USERSPACE
-_SYSCALL_HANDLER1_SIMPLE(k_timer_remaining_get, K_OBJ_TIMER, struct k_timer *);
-_SYSCALL_HANDLER1_SIMPLE(k_timer_user_data_get, K_OBJ_TIMER, struct k_timer *);
+Z_SYSCALL_HANDLER1_SIMPLE(k_timer_remaining_get, K_OBJ_TIMER, struct k_timer *);
+Z_SYSCALL_HANDLER1_SIMPLE(k_timer_user_data_get, K_OBJ_TIMER, struct k_timer *);
 
-_SYSCALL_HANDLER(k_timer_user_data_set, timer, user_data)
+Z_SYSCALL_HANDLER(k_timer_user_data_set, timer, user_data)
 {
-	_SYSCALL_OBJ(timer, K_OBJ_TIMER);
+	Z_OOPS(Z_SYSCALL_OBJ(timer, K_OBJ_TIMER));
 	_impl_k_timer_user_data_set((struct k_timer *)timer, (void *)user_data);
 	return 0;
 }

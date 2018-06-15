@@ -23,10 +23,35 @@
 #include <net/net_pkt.h>
 #include <net/ethernet.h>
 
+#include <usb_descriptor.h>
 #include "netusb.h"
 
 #define USB_CDC_ECM_REQ_TYPE		0x21
 #define USB_CDC_SET_ETH_PKT_FILTER	0x43
+
+#define ECM_INT_EP_IDX			0
+#define ECM_OUT_EP_IDX			1
+#define ECM_IN_EP_IDX			2
+
+static void ecm_int_in(u8_t ep, enum usb_dc_ep_cb_status_code ep_status);
+
+static struct usb_ep_cfg_data ecm_ep_data[] = {
+	/* Configuration ECM */
+	{
+		.ep_cb = ecm_int_in,
+		.ep_addr = CONFIG_CDC_ECM_INT_EP_ADDR
+	},
+	{
+		/* high-level transfer mgmt */
+		.ep_cb = usb_transfer_ep_callback,
+		.ep_addr = CONFIG_CDC_ECM_OUT_EP_ADDR
+	},
+	{
+		/* high-level transfer mgmt */
+		.ep_cb = usb_transfer_ep_callback,
+		.ep_addr = CONFIG_CDC_ECM_IN_EP_ADDR
+	},
+};
 
 static u8_t tx_buf[NETUSB_MTU], rx_buf[NETUSB_MTU];
 
@@ -107,8 +132,8 @@ static int ecm_send(struct net_pkt *pkt)
 	}
 
 	/* transfer data to host */
-	ret = usb_transfer_sync(CONFIG_CDC_ECM_IN_EP_ADDR, tx_buf, b_idx,
-				USB_TRANS_WRITE);
+	ret = usb_transfer_sync(ecm_ep_data[ECM_IN_EP_IDX].ep_addr,
+				tx_buf, b_idx, USB_TRANS_WRITE);
 	if (ret != b_idx) {
 		SYS_LOG_ERR("Transfer failure");
 		return -EINVAL;
@@ -162,45 +187,70 @@ static void ecm_read_cb(u8_t ep, int size, void *priv)
 	netusb_recv(pkt);
 
 done:
-	usb_transfer(CONFIG_CDC_ECM_OUT_EP_ADDR, rx_buf, sizeof(rx_buf),
-		     USB_TRANS_READ, ecm_read_cb, NULL);
+	usb_transfer(ecm_ep_data[ECM_OUT_EP_IDX].ep_addr, rx_buf,
+		     sizeof(rx_buf), USB_TRANS_READ, ecm_read_cb, NULL);
 }
 
 static int ecm_connect(bool connected)
 {
 	if (connected) {
-		ecm_read_cb(CONFIG_CDC_ECM_OUT_EP_ADDR, 0, NULL);
+		ecm_read_cb(ecm_ep_data[ECM_OUT_EP_IDX].ep_addr, 0, NULL);
 	} else {
 		/* Cancel any transfer */
-		usb_cancel_transfer(CONFIG_CDC_ECM_OUT_EP_ADDR);
-		usb_cancel_transfer(CONFIG_CDC_ECM_IN_EP_ADDR);
+		usb_cancel_transfer(ecm_ep_data[ECM_OUT_EP_IDX].ep_addr);
+		usb_cancel_transfer(ecm_ep_data[ECM_IN_EP_IDX].ep_addr);
 	}
 
 	return 0;
 }
 
-static struct usb_ep_cfg_data ecm_ep_data[] = {
-	/* Configuration ECM */
-	{
-		.ep_cb = ecm_int_in,
-		.ep_addr = CONFIG_CDC_ECM_INT_EP_ADDR
-	},
-	{
-		/* high-level transfer mgmt */
-		.ep_cb = usb_transfer_ep_callback,
-		.ep_addr = CONFIG_CDC_ECM_OUT_EP_ADDR
-	},
-	{
-		/* high-level transfer mgmt */
-		.ep_cb = usb_transfer_ep_callback,
-		.ep_addr = CONFIG_CDC_ECM_IN_EP_ADDR
-	},
-};
+static inline void ecm_status_interface(u8_t *iface)
+{
+	SYS_LOG_DBG("iface %u", *iface);
+
+	/* First interface is CDC Comm interface */
+	if (*iface != netusb_get_first_iface_number() + 1) {
+		return;
+	}
+
+	netusb_enable();
+}
+
+static void ecm_status_cb(enum usb_dc_status_code status, u8_t *param)
+{
+	/* Check the USB status and do needed action if required */
+	switch (status) {
+	case USB_DC_DISCONNECTED:
+		SYS_LOG_DBG("USB device disconnected");
+		netusb_disable();
+		break;
+
+	case USB_DC_INTERFACE:
+		SYS_LOG_DBG("USB interface selected");
+		ecm_status_interface(param);
+		break;
+
+	case USB_DC_ERROR:
+	case USB_DC_RESET:
+	case USB_DC_CONNECTED:
+	case USB_DC_CONFIGURED:
+	case USB_DC_SUSPEND:
+	case USB_DC_RESUME:
+		SYS_LOG_DBG("USB unhandlded state: %d", status);
+		break;
+
+	case USB_DC_UNKNOWN:
+	default:
+		SYS_LOG_DBG("USB unknown state: %d", status);
+		break;
+	}
+}
 
 struct netusb_function ecm_function = {
 	.init = NULL,
 	.connect_media = ecm_connect,
 	.class_handler = ecm_class_handler,
+	.status_cb = ecm_status_cb,
 	.send_pkt = ecm_send,
 	.num_ep = ARRAY_SIZE(ecm_ep_data),
 	.ep = ecm_ep_data,

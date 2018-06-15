@@ -120,7 +120,7 @@ SECTION_FUNC(TEXT, _arm_do_syscall)
     /*
      * r0-r5 contain arguments
      * r6 contains call_id
-     * r7 contains original LR
+     * r8 contains original LR
      */
     ldr ip, =_SYSCALL_BAD
     cmp r6, ip
@@ -177,10 +177,18 @@ dispatch_syscall:
      */
     isb
 
+    /* Zero out volatile (caller-saved) registers so as to not leak state from
+     * kernel mode. The C calling convention for the syscall handler will
+     * restore the others to original values.
+     */
+    mov r1, #0
+    mov r2, #0
+    mov r3, #0
+
     /*
      * return back to original function that called SVC, add 1 to force thumb
      * mode
      */
-    mov ip, r7
+    mov ip, r8
     orrs ip, ip, #1
     bx ip

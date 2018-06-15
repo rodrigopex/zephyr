@@ -12,6 +12,7 @@
 #if !defined(_ASMLANGUAGE)
 #include <atomic.h>
 #include <misc/dlist.h>
+#include <misc/rb.h>
 #include <string.h>
 #endif
 
@@ -26,7 +27,6 @@
  * Must be before kerneL_arch_data.h because it might need them to be already
  * defined.
  */
-
 
 /* states: common uses low bits, arch-specific use high bits */
 
@@ -45,8 +45,8 @@
 /* Thread is suspended */
 #define _THREAD_SUSPENDED (1 << 4)
 
-/* Thread is actively looking at events to see if they are ready */
-#define _THREAD_POLLING (1 << 5)
+/* Thread is present in the ready queue */
+#define _THREAD_QUEUED (1 << 6)
 
 /* end - states */
 
@@ -69,13 +69,13 @@ struct _ready_q {
 #ifndef CONFIG_SMP
 	/* always contains next thread to run: cannot be NULL */
 	struct k_thread *cache;
-
-	/* bitmap of priorities that contain at least one ready thread */
-	u32_t prio_bmap[K_NUM_PRIO_BITMAPS];
 #endif
 
-	/* ready queues, one per priority */
-	sys_dlist_t q[K_NUM_PRIORITIES];
+#ifdef CONFIG_SCHED_DUMB
+	sys_dlist_t runq;
+#else
+	struct _priq_rb runq;
+#endif
 };
 
 typedef struct _ready_q _ready_q_t;
@@ -90,7 +90,15 @@ struct _cpu {
 	/* currently scheduled thread */
 	struct k_thread *current;
 
-	int id;
+	/* one assigned idle thread per CPU */
+	struct k_thread *idle_thread;
+
+	u8_t id;
+
+#ifdef CONFIG_SMP
+	/* True when _current is allowed to context switch */
+	u8_t swap_ok;
+#endif
 };
 
 typedef struct _cpu _cpu_t;
@@ -158,8 +166,10 @@ typedef struct _kernel _kernel_t;
 extern struct _kernel _kernel;
 
 #ifdef CONFIG_SMP
+#define _current_cpu (_arch_curr_cpu())
 #define _current (_arch_curr_cpu()->current)
 #else
+#define _current_cpu (&_kernel.cpus[0])
 #define _current _kernel.current
 #endif
 
@@ -233,25 +243,6 @@ static ALWAYS_INLINE void _new_thread_init(struct k_thread *thread,
 	thread->stack_info.size = (u32_t)stackSize;
 #endif /* CONFIG_THREAD_STACK_INFO */
 }
-
-#if defined(CONFIG_THREAD_MONITOR)
-/*
- * Add a thread to the kernel's list of active threads.
- */
-static ALWAYS_INLINE void thread_monitor_init(struct k_thread *thread)
-{
-	unsigned int key;
-
-	key = irq_lock();
-	thread->next_thread = _kernel.threads;
-	_kernel.threads = thread;
-	irq_unlock(key);
-}
-#else
-#define thread_monitor_init(thread)		\
-	do {/* do nothing */			\
-	} while ((0))
-#endif /* CONFIG_THREAD_MONITOR */
 
 #endif /* _ASMLANGUAGE */
 

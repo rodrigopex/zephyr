@@ -48,12 +48,12 @@ static char units[MAX_INSTANCE_COUNT][LIGHT_STRING_SHORT];
 static struct lwm2m_engine_obj light_control;
 static struct lwm2m_engine_obj_field fields[] = {
 	OBJ_FIELD_DATA(LIGHT_ON_OFF_ID, RW, BOOL),
-	OBJ_FIELD_DATA(LIGHT_DIMMER_ID, RW, U8),
-	OBJ_FIELD_DATA(LIGHT_ON_TIME_ID, RW, S32),
-	OBJ_FIELD_DATA(LIGHT_CUMULATIVE_ACTIVE_POWER_ID, R, FLOAT32),
-	OBJ_FIELD_DATA(LIGHT_POWER_FACTOR_ID, R, FLOAT32),
-	OBJ_FIELD_DATA(LIGHT_COLOUR_ID, RW, STRING),
-	OBJ_FIELD_DATA(LIGHT_SENSOR_UNITS_ID, R, STRING),
+	OBJ_FIELD_DATA(LIGHT_DIMMER_ID, RW_OPT, U8),
+	OBJ_FIELD_DATA(LIGHT_ON_TIME_ID, RW_OPT, S32),
+	OBJ_FIELD_DATA(LIGHT_CUMULATIVE_ACTIVE_POWER_ID, R_OPT, FLOAT32),
+	OBJ_FIELD_DATA(LIGHT_POWER_FACTOR_ID, R_OPT, FLOAT32),
+	OBJ_FIELD_DATA(LIGHT_COLOUR_ID, RW_OPT, STRING),
+	OBJ_FIELD_DATA(LIGHT_SENSOR_UNITS_ID, R_OPT, STRING),
 };
 
 static struct lwm2m_engine_obj_inst inst[MAX_INSTANCE_COUNT];
@@ -182,7 +182,7 @@ static int ipso_light_control_init(struct device *dev)
 
 	light_control.obj_id = IPSO_OBJECT_LIGHT_CONTROL_ID;
 	light_control.fields = fields;
-	light_control.field_count = sizeof(fields) / sizeof(*fields);
+	light_control.field_count = ARRAY_SIZE(fields);
 	light_control.max_instance_count = MAX_INSTANCE_COUNT;
 	light_control.create_cb = light_control_create;
 	lwm2m_register_obj(&light_control);

@@ -6,8 +6,9 @@
 
 if BOARD_NRF52840_PCA10056
 
-config GPIO_AS_PINRESET
-	bool "GPIO as pin reset (reset button)"
+config BOARD_HAS_DCDC
+	bool "Board has DCDC circuitry"
+	select SOC_DCDC_NRF52X
 	default y
 
 endif # BOARD_NRF52840_PCA10056

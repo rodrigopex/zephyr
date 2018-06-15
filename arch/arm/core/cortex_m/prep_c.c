@@ -27,8 +27,7 @@
 #ifdef CONFIG_CPU_CORTEX_M_HAS_VTOR
 
 #ifdef CONFIG_XIP
-#define VECTOR_ADDRESS ((uintptr_t)&_image_rom_start + \
-			CONFIG_TEXT_SECTION_OFFSET)
+#define VECTOR_ADDRESS ((uintptr_t)_vector_start)
 #else
 #define VECTOR_ADDRESS CONFIG_SRAM_BASE_ADDRESS
 #endif
@@ -80,11 +79,13 @@ static inline void enable_floating_point(void)
 	 * does not automatically save the volatile FP registers until they
 	 * have first been touched. Perform a dummy move operation so that
 	 * the stack frames are created as expected before any thread
-	 * context switching can occur.
+	 * context switching can occur. It has to be surrounded by instruction
+	 * synchronisation barriers to ensure that the whole sequence is
+	 * serialized.
 	 */
 	__asm__ volatile(
+		"isb;\n\t"
 		"vmov s0, s0;\n\t"
-		"dsb;\n\t"
 		"isb;\n\t"
 		);
 }

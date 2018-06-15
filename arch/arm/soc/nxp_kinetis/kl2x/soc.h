@@ -15,12 +15,9 @@ extern "C" {
 
 #define UART0_CLK_SRC kCLOCK_CoreSysClk
 
-/* IRQs */
-#define IRQ_SPI0		10
-#define IRQ_SPI1                11
-
 #ifndef _ASMLANGUAGE
 
+#include <fsl_common.h>
 #include <device.h>
 #include <misc/util.h>
 #include <random/rand32.h>

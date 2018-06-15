@@ -10,7 +10,6 @@
 #include <init.h>
 #include <string.h>
 #include <misc/__assert.h>
-#include <kswap.h>
 
 /* Linker-defined symbols bound the static pool structs */
 extern struct k_mem_pool _k_mem_pool_list_start[];
@@ -30,7 +29,7 @@ static int pool_id(struct k_mem_pool *pool)
 
 static void k_mem_pool_init(struct k_mem_pool *p)
 {
-	sys_dlist_init(&p->wait_q);
+	_waitq_init(&p->wait_q);
 	_sys_mem_pool_base_init(&p->base);
 }
 
@@ -51,7 +50,7 @@ SYS_INIT(init_static_pools, PRE_KERNEL_1, CONFIG_KERNEL_INIT_PRIORITY_OBJECTS);
 int k_mem_pool_alloc(struct k_mem_pool *p, struct k_mem_block *block,
 		     size_t size, s32_t timeout)
 {
-	int ret, key;
+	int ret;
 	s64_t end = 0;
 
 	__ASSERT(!(_is_in_isr() && timeout != K_NO_WAIT), "");
@@ -63,20 +62,36 @@ int k_mem_pool_alloc(struct k_mem_pool *p, struct k_mem_block *block,
 	while (1) {
 		u32_t level_num, block_num;
 
-		ret = _sys_mem_pool_block_alloc(&p->base, size, &level_num,
-						&block_num, &block->data);
+		/* There is a "managed race" in alloc that can fail
+		 * (albeit in a well-defined way, see comments there)
+		 * with -EAGAIN when simultaneous allocations happen.
+		 * Retry exactly once before sleeping to resolve it.
+		 * If we're so contended that it fails twice, then we
+		 * clearly want to block.
+		 */
+		for (int i = 0; i < 2; i++) {
+			ret = _sys_mem_pool_block_alloc(&p->base, size,
+							&level_num, &block_num,
+							&block->data);
+			if (ret != -EAGAIN) {
+				break;
+			}
+		}
+
+		if (ret == -EAGAIN) {
+			ret = -ENOMEM;
+		}
+
 		block->id.pool = pool_id(p);
 		block->id.level = level_num;
 		block->id.block = block_num;
 
 		if (ret == 0 || timeout == K_NO_WAIT ||
-		    ret == -EAGAIN || (ret && ret != -ENOMEM)) {
+		    (ret && ret != -ENOMEM)) {
 			return ret;
 		}
 
-		key = irq_lock();
-		_pend_current_thread(&p->wait_q, timeout);
-		_Swap(key);
+		_pend_current_thread(irq_lock(), &p->wait_q, timeout);
 
 		if (timeout != K_FOREVER) {
 			timeout = end - _tick_get();
@@ -102,17 +117,10 @@ void k_mem_pool_free_id(struct k_mem_block_id *id)
 	 */
 	key = irq_lock();
 
-	while (!sys_dlist_is_empty(&p->wait_q)) {
-		struct k_thread *th = (void *)sys_dlist_peek_head(&p->wait_q);
-
-		_unpend_thread(th);
-		_abort_thread_timeout(th);
-		_ready_thread(th);
-		need_sched = 1;
-	}
+	need_sched = _unpend_all(&p->wait_q);
 
 	if (need_sched && !_is_in_isr()) {
-		_reschedule_threads(key);
+		_reschedule(key);
 	} else {
 		irq_unlock(key);
 	}
@@ -121,6 +129,40 @@ void k_mem_pool_free_id(struct k_mem_block_id *id)
 void k_mem_pool_free(struct k_mem_block *block)
 {
 	k_mem_pool_free_id(&block->id);
+}
+
+void *k_mem_pool_malloc(struct k_mem_pool *pool, size_t size)
+{
+	struct k_mem_block block;
+
+	/*
+	 * get a block large enough to hold an initial (hidden) block
+	 * descriptor, as well as the space the caller requested
+	 */
+	if (__builtin_add_overflow(size, sizeof(struct k_mem_block_id),
+				   &size)) {
+		return NULL;
+	}
+	if (k_mem_pool_alloc(pool, &block, size, K_NO_WAIT) != 0) {
+		return NULL;
+	}
+
+	/* save the block descriptor info at the start of the actual block */
+	memcpy(block.data, &block.id, sizeof(struct k_mem_block_id));
+
+	/* return address of the user area part of the block to the caller */
+	return (char *)block.data + sizeof(struct k_mem_block_id);
+}
+
+void k_free(void *ptr)
+{
+	if (ptr != NULL) {
+		/* point to hidden block descriptor at start of block */
+		ptr = (char *)ptr - sizeof(struct k_mem_block_id);
+
+		/* return block to the heap memory pool */
+		k_mem_pool_free_id(ptr);
+	}
 }
 
 #if (CONFIG_HEAP_MEM_POOL_SIZE > 0)
@@ -137,37 +179,7 @@ K_MEM_POOL_DEFINE(_heap_mem_pool, 64, CONFIG_HEAP_MEM_POOL_SIZE, 1, 4);
 
 void *k_malloc(size_t size)
 {
-	struct k_mem_block block;
-
-	/*
-	 * get a block large enough to hold an initial (hidden) block
-	 * descriptor, as well as the space the caller requested
-	 */
-	if (__builtin_add_overflow(size, sizeof(struct k_mem_block_id),
-				   &size)) {
-		return NULL;
-	}
-	if (k_mem_pool_alloc(_HEAP_MEM_POOL, &block, size, K_NO_WAIT) != 0) {
-		return NULL;
-	}
-
-	/* save the block descriptor info at the start of the actual block */
-	memcpy(block.data, &block.id, sizeof(struct k_mem_block_id));
-
-	/* return address of the user area part of the block to the caller */
-	return (char *)block.data + sizeof(struct k_mem_block_id);
-}
-
-
-void k_free(void *ptr)
-{
-	if (ptr != NULL) {
-		/* point to hidden block descriptor at start of block */
-		ptr = (char *)ptr - sizeof(struct k_mem_block_id);
-
-		/* return block to the heap memory pool */
-		k_mem_pool_free_id(ptr);
-	}
+	return k_mem_pool_malloc(_HEAP_MEM_POOL, size);
 }
 
 void *k_calloc(size_t nmemb, size_t size)
@@ -185,4 +197,22 @@ void *k_calloc(size_t nmemb, size_t size)
 	}
 	return ret;
 }
+
+void k_thread_system_pool_assign(struct k_thread *thread)
+{
+	thread->resource_pool = _HEAP_MEM_POOL;
+}
 #endif
+
+void *z_thread_malloc(size_t size)
+{
+	void *ret;
+
+	if (_current->resource_pool) {
+		ret = k_mem_pool_malloc(_current->resource_pool, size);
+	} else {
+		ret = NULL;
+	}
+
+	return ret;
+}

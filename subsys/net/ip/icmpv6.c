@@ -182,7 +182,7 @@ struct net_icmp_hdr *net_icmpv6_get_hdr(struct net_pkt *pkt,
 	frag = net_frag_read_u8(frag, pos, &pos, &hdr->code);
 	frag = net_frag_read(frag, pos, &pos, sizeof(hdr->chksum),
 			     (u8_t *)&hdr->chksum);
-	if (!frag) {
+	if (pos > 0 && !frag) {
 		NET_ERR("Malformed ICMPv6 packet");
 		return NULL;
 	}
@@ -208,7 +208,7 @@ struct net_icmp_hdr *net_icmpv6_set_hdr(struct net_pkt *pkt,
 	frag = net_pkt_write(pkt, frag, pos, &pos, sizeof(hdr->chksum),
 			     (u8_t *)&hdr->chksum, PKT_WAIT_TIME);
 	if (!frag) {
-		NET_ASSERT(frag);
+		NET_ERR("Cannot set the ICMPv6 header");
 		return NULL;
 	}
 
@@ -238,8 +238,8 @@ struct net_icmpv6_ns_hdr *net_icmpv6_get_ns_hdr(struct net_pkt *pkt,
 			     net_pkt_ipv6_ext_len(pkt) +
 			     sizeof(struct net_icmp_hdr) + 4 /* reserved */,
 			     &pos, sizeof(struct in6_addr), (u8_t *)&hdr->tgt);
-	if (!frag) {
-		NET_ASSERT(frag);
+	if (pos > 0 && !frag) {
+		NET_ERR("Cannot get the ICMPv6 NS header");;
 		return NULL;
 	}
 
@@ -267,7 +267,7 @@ struct net_icmpv6_ns_hdr *net_icmpv6_set_ns_hdr(struct net_pkt *pkt,
 	frag = net_pkt_write(pkt, frag, pos, &pos, sizeof(struct in6_addr),
 			     (u8_t *)&hdr->tgt, PKT_WAIT_TIME);
 	if (!frag) {
-		NET_ASSERT(frag);
+		NET_ERR("Cannot set the ICMPv6 NS header");
 		return NULL;
 	}
 
@@ -294,7 +294,7 @@ struct net_icmpv6_nd_opt_hdr *net_icmpv6_get_nd_opt_hdr(struct net_pkt *pkt,
 				net_pkt_ipv6_ext_opt_len(pkt),
 				&pos, &hdr->type);
 	frag = net_frag_read_u8(frag, pos, &pos, &hdr->len);
-	if (!frag) {
+	if (pos > 0 && !frag) {
 		return NULL;
 	}
 
@@ -320,8 +320,8 @@ struct net_icmpv6_na_hdr *net_icmpv6_get_na_hdr(struct net_pkt *pkt,
 	frag = net_frag_skip(frag, pos, &pos, 3); /* reserved */
 	frag = net_frag_read(frag, pos, &pos, sizeof(struct in6_addr),
 			     (u8_t *)&hdr->tgt);
-	if (!frag) {
-		NET_ASSERT(frag);
+	if (pos > 0 && !frag) {
+		NET_ERR("Cannot get the ICMPv6 NA header");
 		return NULL;
 	}
 
@@ -352,7 +352,7 @@ struct net_icmpv6_na_hdr *net_icmpv6_set_na_hdr(struct net_pkt *pkt,
 	frag = net_pkt_write(pkt, frag, pos, &pos, sizeof(struct in6_addr),
 			     (u8_t *)&hdr->tgt, PKT_WAIT_TIME);
 	if (!frag) {
-		NET_ASSERT(frag);
+		NET_ERR("Cannot set the ICMPv6 NA header");
 		return NULL;
 	}
 
@@ -382,8 +382,8 @@ struct net_icmpv6_ra_hdr *net_icmpv6_get_ra_hdr(struct net_pkt *pkt,
 			     (u8_t *)&hdr->reachable_time);
 	frag = net_frag_read(frag, pos, &pos, sizeof(hdr->retrans_timer),
 			     (u8_t *)&hdr->retrans_timer);
-	if (!frag) {
-		NET_ASSERT(frag);
+	if (pos > 0 && !frag) {
+		NET_ERR("Cannot get the ICMPv6 RA header");
 		return NULL;
 	}
 
@@ -537,6 +537,8 @@ int net_icmpv6_send_error(struct net_pkt *orig, u8_t type, u8_t code,
 	} else if (NET_IPV6_HDR(orig)->nexthdr == IPPROTO_TCP) {
 		extra_len = sizeof(struct net_ipv6_hdr) +
 			sizeof(struct net_tcp_hdr);
+	} else if (NET_IPV6_HDR(orig)->nexthdr == NET_IPV6_NEXTHDR_FRAG) {
+		extra_len = net_pkt_get_len(orig);
 	} else {
 		size_t space = CONFIG_NET_BUF_DATA_SIZE -
 			net_if_get_ll_reserve(iface,
@@ -650,9 +652,6 @@ int net_icmpv6_send_echo_request(struct net_if *iface,
 
 	net_ipaddr_copy(&NET_IPV6_HDR(pkt)->src, src);
 	net_ipaddr_copy(&NET_IPV6_HDR(pkt)->dst, dst);
-
-	/* Clear and then set the chksum */
-	net_icmpv6_set_chksum(pkt, pkt->frags);
 
 	if (net_ipv6_finalize_raw(pkt, IPPROTO_ICMPV6) < 0) {
 		goto drop;

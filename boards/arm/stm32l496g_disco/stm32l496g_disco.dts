@@ -27,8 +27,6 @@
 
 	gpio_keys {
 		compatible = "gpio-keys";
-		#address-cells = <1>;
-		#size-cells = <0>;
 		joy_sel: joystick@0 {
 			label = "joystick select";
 			gpios = <&gpioc 13 GPIO_INT_ACTIVE_LOW>;
@@ -69,4 +67,12 @@
 	pinctrl-0 = <&usart2_pins_c>;
 	pinctrl-names = "default";
 	status = "ok";
+};
+
+&timers2 {
+	status = "ok";
+
+	pwm {
+		status = "ok";
+	};
 };

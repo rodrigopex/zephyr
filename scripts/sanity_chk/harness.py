@@ -9,9 +9,16 @@ class Harness:
         self.matches = OrderedDict()
         self.ordered = True
         self.repeat = 1
+        self.tests = {}
+        self.id = None
+        self.fail_on_fault = True
 
     def configure(self, instance):
         config = instance.test.harness_config
+        self.id = instance.test.id
+        if "ignore_faults" in instance.test.tags:
+            self.fail_on_fault = False
+
         if config:
             self.type = config.get('type', None)
             self.regex = config.get('regex', [] )
@@ -48,15 +55,33 @@ class Console(Harness):
                 else:
                     self.state = "failed"
 
-
-
 class Test(Harness):
     RUN_PASSED = "PROJECT EXECUTION SUCCESSFUL"
     RUN_FAILED = "PROJECT EXECUTION FAILED"
 
+    faults = [
+            "Unknown Fatal Error",
+            "MPU FAULT",
+            "Kernel Panic",
+            "Kernel OOPS",
+            "BUS FAULT"
+            ]
+
     def handle(self, line):
+        result = re.compile("(PASS|FAIL|SKIP) - (test_)?(.*)")
+        match = result.match(line)
+        if match:
+            name = "{}.{}".format(self.id, match.group(3))
+            self.tests[name] = match.group(1)
+
         if self.RUN_PASSED in line:
             self.state = "passed"
 
         if self.RUN_FAILED in line:
             self.state = "failed"
+
+        if self.fail_on_fault:
+            for fault in self.faults:
+                if fault in line:
+                    self.state = "failed"
+

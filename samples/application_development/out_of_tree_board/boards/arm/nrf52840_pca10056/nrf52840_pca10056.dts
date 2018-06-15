@@ -19,6 +19,18 @@
 	};
 };
 
+&gpiote {
+	status ="ok";
+};
+
+&gpio0 {
+	status ="ok";
+};
+
+&gpio1 {
+	status ="ok";
+};
+
 &uart0 {
 	compatible = "nordic,nrf-uart";
 	current-speed = <115200>;
@@ -52,9 +64,9 @@
 			reg = <0x000de000 0x0001e000>;
 		};
 
-#if defined(CONFIG_FILE_SYSTEM_NFFS)
-		nffs_partition: partition@fc000 {
-			label = "nffs";
+#if defined(CONFIG_FS_FLASH_STORAGE_PARTITION)
+		storage_partition: partition@fc000 {
+			label = "storage";
 			reg = <0x000fc000 0x00004000>;
 		};
 #endif

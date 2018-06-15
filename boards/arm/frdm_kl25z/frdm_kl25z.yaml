@@ -14,5 +14,5 @@ testing:
 supported:
   - adc
   - i2c
-  - spi
   - gpio
+  - usb_device

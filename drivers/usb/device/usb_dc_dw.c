@@ -14,13 +14,13 @@
  * level control routines to deal directly with the hardware.
  */
 
-#include <soc.h>
 #include <string.h>
 #include <stdio.h>
 #include <misc/byteorder.h>
 #include <usb/usb_dc.h>
 #include <usb/usb_device.h>
 #include "usb_dw_registers.h"
+#include <soc.h>
 #ifdef CONFIG_QMSI
 #include "clk.h"
 #endif
@@ -44,7 +44,7 @@
 struct usb_ep_ctrl_prv {
 	u8_t ep_ena;
 	u8_t fifo_num;
-	u8_t fifo_size;
+	u32_t fifo_size;
 	u16_t mps;         /* Max ep pkt size */
 	usb_dc_ep_callback cb;/* Endpoint callback function */
 	u32_t data_len;
@@ -527,7 +527,12 @@ static int usb_dw_init(void)
 	}
 
 	/* Set device speed to FS */
+#ifdef USB_PHY_2
+	USB_DW->dcfg &= ~USB_DW_DCFG_DEV_SPD_FS;
+	USB_DW->dcfg |= 0x01;
+#else
 	USB_DW->dcfg |= USB_DW_DCFG_DEV_SPD_FS;
+#endif
 
 	/* Set NAK for all OUT EPs */
 	for (ep = 0; ep < USB_DW_OUT_EP_NUM; ep++) {
@@ -805,6 +810,38 @@ int usb_dc_set_address(const u8_t addr)
 
 	USB_DW->dcfg &= ~USB_DW_DCFG_DEV_ADDR_MASK;
 	USB_DW->dcfg |= addr << USB_DW_DCFG_DEV_ADDR_OFFSET;
+
+	return 0;
+}
+
+int usb_dc_ep_check_cap(const struct usb_dc_ep_cfg_data * const cfg)
+{
+	u8_t ep_idx = USB_DW_EP_ADDR2IDX(cfg->ep_addr);
+
+	SYS_LOG_DBG("ep %x, mps %d, type %d", cfg->ep_addr, cfg->ep_mps,
+		    cfg->ep_type);
+
+	if ((cfg->ep_type == USB_DC_EP_CONTROL) && ep_idx) {
+		SYS_LOG_ERR("invalid endpoint configuration");
+		return -1;
+	}
+
+	if (cfg->ep_mps > QM_USB_MAX_PACKET_SIZE) {
+		SYS_LOG_WRN("unsupported packet size");
+		return -1;
+	}
+
+	if ((USB_DW_EP_ADDR2DIR(cfg->ep_addr) == USB_EP_DIR_OUT) &&
+	    (ep_idx >= QM_USB_OUT_EP_NUM)) {
+		SYS_LOG_WRN("OUT endpoint address out of range");
+		return -1;
+	}
+
+	if ((USB_DW_EP_ADDR2DIR(cfg->ep_addr) == USB_EP_DIR_IN) &&
+	    (ep_idx >= QM_USB_IN_EP_NUM)) {
+		SYS_LOG_WRN("IN endpoint address out of range");
+		return -1;
+	}
 
 	return 0;
 }
@@ -1189,13 +1226,9 @@ int usb_dc_ep_mps(const u8_t ep)
 {
 	enum usb_dw_out_ep_idx ep_idx = USB_DW_EP_ADDR2IDX(ep);
 
-	switch (USB_DW_EP_ADDR2DIR(ep)) {
-	case USB_EP_DIR_OUT:
+	if (USB_DW_EP_ADDR2DIR(ep) == USB_EP_DIR_OUT) {
 		return usb_dw_ctrl.out_ep_ctrl[ep_idx].mps;
-	case USB_EP_DIR_IN:
+	} else {
 		return usb_dw_ctrl.in_ep_ctrl[ep_idx].mps;
 	}
-
-	/* Should not happen */
-	return 0;
 }
