@@ -6,7 +6,7 @@
 #ifndef __DT_BINDING_ST_MEM_H
 #define __DT_BINDING_ST_MEM_H
 
-#define __SIZE_K(x) (x * 1024)
+#define __SIZE_K(x) ((x) * 1024)
 
 #if defined(CONFIG_SOC_STM32F030X8)
 #define DT_FLASH_SIZE		__SIZE_K(64)
@@ -85,6 +85,9 @@
 #define DT_FLASH_SIZE		__SIZE_K(2048)
 #define DT_SRAM_SIZE		__SIZE_K(384)
 #define DT_CCM_SIZE		__SIZE_K(64)
+#elif defined(CONFIG_SOC_STM32F746XG)
+#define DT_FLASH_SIZE		__SIZE_K(1024)
+#define DT_SRAM_SIZE		__SIZE_K(320)
 #elif defined(CONFIG_SOC_STM32L053X8)
 #define DT_FLASH_SIZE		__SIZE_K(64)
 #define DT_SRAM_SIZE		__SIZE_K(8)

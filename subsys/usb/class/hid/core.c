@@ -17,6 +17,11 @@
 #include <usb_descriptor.h>
 #include <class/usb_hid.h>
 
+#define HID_INT_EP_ADDR				0x81
+
+#define HID_INT_IN_EP_IDX			0
+#define HID_INT_OUT_EP_IDX			1
+
 struct usb_hid_config {
 	struct usb_if_descriptor if0;
 	struct usb_hid_descriptor if0_hid;
@@ -54,7 +59,7 @@ USBD_CLASS_DESCR_DEFINE(primary) struct usb_hid_config hid_cfg = {
 	.if0_int_ep = {
 		.bLength = sizeof(struct usb_ep_descriptor),
 		.bDescriptorType = USB_ENDPOINT_DESC,
-		.bEndpointAddress = CONFIG_HID_INT_EP_ADDR,
+		.bEndpointAddress = HID_INT_EP_ADDR,
 		.bmAttributes = USB_DC_EP_INTERRUPT,
 		.wMaxPacketSize =
 			sys_cpu_to_le16(
@@ -202,7 +207,7 @@ static void hid_int_in(u8_t ep, enum usb_dc_ep_cb_status_code ep_status)
 static struct usb_ep_cfg_data hid_ep_data[] = {
 	{
 		.ep_cb = hid_int_in,
-		.ep_addr = CONFIG_HID_INT_EP_ADDR
+		.ep_addr = HID_INT_EP_ADDR
 	}
 };
 
@@ -226,7 +231,7 @@ USBD_CFG_DATA_DEFINE(hid) struct usb_cfg_data hid_config = {
 };
 
 #if !defined(CONFIG_USB_COMPOSITE_DEVICE)
-static u8_t interface_data[64];
+static u8_t interface_data[CONFIG_USB_HID_MAX_PAYLOAD_SIZE];
 #endif
 
 int usb_hid_init(void)
@@ -269,4 +274,10 @@ void usb_hid_register_device(const u8_t *desc, size_t size,
 	hid_device.report_size = size;
 
 	hid_device.ops = ops;
+}
+
+int hid_int_ep_write(const u8_t *data, u32_t data_len, u32_t *bytes_ret)
+{
+	return usb_write(hid_ep_data[HID_INT_IN_EP_IDX].ep_addr, data,
+			 data_len, bytes_ret);
 }

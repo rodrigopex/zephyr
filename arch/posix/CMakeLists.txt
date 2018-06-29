@@ -1,7 +1,6 @@
 zephyr_cc_option_ifdef(CONFIG_LTO -flto)
 
 zephyr_compile_options(
-  -Wno-format-truncation
   -fno-freestanding
   -Wno-undef
   -Wno-implicit-function-declaration
@@ -9,7 +8,7 @@ zephyr_compile_options(
   -MMD
   -MP
   ${ARCH_FLAG}
-  -include ${PROJECT_SOURCE_DIR}/arch/posix/include/posix_cheats.h
+  -include ${ZEPHYR_BASE}/arch/posix/include/posix_cheats.h
   )
 
 zephyr_compile_options_ifdef(CONFIG_COVERAGE
