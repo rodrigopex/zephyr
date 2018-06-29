@@ -1,0 +1,6 @@
+sample:
+  name: ADC Driver Sample
+tests:
+  test:
+    tags: drivers
+    depends_on: adc

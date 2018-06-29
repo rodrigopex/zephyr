@@ -1,0 +1,35 @@
+# Kconfig - ADC configuration options
+
+#
+# Copyright (c) 2018 Ayna.tech
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+menuconfig ADC_NRF52
+	bool "nRF52 SAADC Driver"
+	depends on SOC_SERIES_NRF52X
+	select ADC_0
+	select HAS_NRFX
+	select NRFX_SAADC
+	default n
+	help
+	  Enable the driver implementation of the nRF52 SAADC IP.
+
+if ADC_NRF52
+config NRFX_SAADC_RESOLUTION
+	int "SAADC resolution [0: 8bits, 1: 10 bits, 2: 12 bits, and 3: 14 bits]"
+	range 0 3
+	default 1
+	help
+	  nRF5 acquisition resolution 0: 8bits, 1: 10 bits, 2: 12 bits, and 3: 14 bits.
+
+config NRFX_SAADC_PIN
+	int "SAADC analog pin. From AIN0-AIN7"
+	range 0 7
+	default 1
+	help
+	  nRF5 adc pin AIN0-AIN7.
+
+
+endif # ADC_NRF52

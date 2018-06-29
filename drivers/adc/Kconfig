@@ -84,4 +84,6 @@ source "drivers/adc/Kconfig.sam_afec"
 
 source "drivers/adc/Kconfig.ti_adc108s102"
 
+source "drivers/adc/Kconfig.nrf52"
+
 endif # ADC

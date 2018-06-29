@@ -1126,7 +1126,11 @@
 // <e> NRFX_SAADC_ENABLED - nrfx_saadc - SAADC peripheral driver
 //==========================================================
 #ifndef NRFX_SAADC_ENABLED
+#ifdef CONFIG_NRFX_SAADC
+#define NRFX_SAADC_ENABLED 1
+#else
 #define NRFX_SAADC_ENABLED 0
+#endif
 #endif
 // <o> NRFX_SAADC_CONFIG_RESOLUTION  - Resolution
 
@@ -1136,7 +1140,11 @@
 // <3=> 14 bit
 
 #ifndef NRFX_SAADC_CONFIG_RESOLUTION
+#ifdef CONFIG_NRFX_SAADC_RESOLUTION
+#define NRFX_SAADC_CONFIG_RESOLUTION CONFIG_NRFX_SAADC_RESOLUTION
+#else
 #define NRFX_SAADC_CONFIG_RESOLUTION 1
+#endif
 #endif
 
 // <o> NRFX_SAADC_CONFIG_OVERSAMPLE  - Sample period

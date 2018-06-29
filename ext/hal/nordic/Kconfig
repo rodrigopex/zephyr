@@ -9,7 +9,7 @@ config HAS_NORDIC_DRIVERS
 
 config HAS_NRFX
 	bool
-	
+
 config NRFX_PWM
 	bool
 
@@ -29,4 +29,8 @@ config NRFX_TWIM
 	bool
 
 config NRFX_WDT
+	bool
+
+config NRFX_SAADC
+    default y
 	bool
