@@ -77,10 +77,10 @@ struct shell;
  * @param[in] _mandatory Number of mandatory arguments.
  * @param[in] _optional  Number of optional arguments.
  */
-#define SHELL_ARG(_mandatory, _optional) {	\
-	.mandatory = _mandatory,		\
-	.optional = _optional,			\
-}
+#define SHELL_ARG(_mandatory, _optional)			\
+	{							\
+		.mandatory = _mandatory, .optional = _optional,	\
+	}
 
 struct shell_static_args {
 	u8_t mandatory; /*!< Number of mandatory arguments. */
@@ -128,16 +128,19 @@ struct shell_static_entry {
  * @param[in] mandatory	Number of mandatory arguments.
  * @param[in] optional	Number of optional arguments.
  */
-#define SHELL_CMD_ARG_REGISTER(syntax, subcmd, help, handler,		   \
-			       mandatory, optional)			   \
-	static const struct shell_static_entry UTIL_CAT(_shell_, syntax) = \
-	SHELL_CMD_ARG(syntax, subcmd, help, handler, mandatory, optional); \
-	static const struct shell_cmd_entry UTIL_CAT(shell_cmd_, syntax)   \
-	__attribute__ ((section("."					   \
-			STRINGIFY(UTIL_CAT(shell_root_cmd_, syntax)))))	   \
-	__attribute__((used)) = {					   \
-		.is_dynamic = false,					   \
-		.u.entry = &UTIL_CAT(_shell_, syntax)			   \
+#define SHELL_CMD_ARG_REGISTER(syntax, subcmd, help, handler, mandatory,				    \
+			       optional)								    \
+	const struct shell_static_args UTIL_CAT(							    \
+		_shell_args_, syntax) = { mandatory, optional };					    \
+	static const struct shell_static_entry UTIL_CAT(_shell_, syntax) = {				    \
+		(const char *)STRINGIFY(syntax), (const char *)help, subcmd,				    \
+		handler, &(UTIL_CAT(_shell_args_, syntax))						    \
+	};												    \
+	static const struct shell_cmd_entry UTIL_CAT(shell_cmd_, syntax)				    \
+	__attribute__((section("." STRINGIFY(UTIL_CAT(							    \
+						     shell_root_cmd_, syntax))))) __attribute__((used)) = { \
+		false,											    \
+		{ (shell_dynamic_get) & UTIL_CAT(_shell_, syntax) }					    \
 	}
 
 /**
@@ -188,11 +191,8 @@ struct shell_static_entry {
  * @param[in] name	Name of the dynamic entry.
  * @param[in] get	Pointer to the function returning dynamic commands array
  */
-#define SHELL_CREATE_DYNAMIC_CMD(name, get)		\
-	static const struct shell_cmd_entry name = {	\
-		.is_dynamic = true,			\
-		.u.dynamic_get = get			\
-	}
+#define SHELL_CREATE_DYNAMIC_CMD(name, get) \
+	static const struct shell_cmd_entry name = { true, get }
 
 /**
  * @brief Initializes a shell command with arguments.
@@ -207,15 +207,15 @@ struct shell_static_entry {
  * @param[in] _mandatory Number of mandatory arguments.
  * @param[in] _optional	 Number of optional arguments.
  */
-#define SHELL_CMD_ARG(_syntax, _subcmd, _help, _handler,		      \
-		      _mandatory, _optional) {				      \
-	.syntax = (const char *)STRINGIFY(_syntax),			      \
-	.subcmd = _subcmd,						      \
-	.help  = (const char *)_help,					      \
-	.handler = _handler,						      \
-	.args = _mandatory ?						      \
-	(&(struct shell_static_args) SHELL_ARG(_mandatory, _optional)) : NULL \
-}
+#define SHELL_CMD_ARG(_syntax, _subcmd, _help, _handler, _mandatory,	       \
+		      _optional)					       \
+	{								       \
+		.syntax = (const char *)STRINGIFY(_syntax), .subcmd = _subcmd, \
+		.help = (const char *)_help, .handler = _handler,	       \
+		.args = _mandatory ? (&(struct shell_static_args)SHELL_ARG(    \
+					      _mandatory, _optional)) :	       \
+			NULL						       \
+	}
 
 /**
  * @brief Initializes a shell command.
@@ -225,9 +225,11 @@ struct shell_static_entry {
  * @param[in] _help	Pointer to a command help string.
  * @param[in] _handler	Pointer to a function handler.
  */
-#define SHELL_CMD(_syntax, _subcmd, _help, _handler) \
-	SHELL_CMD_ARG(_syntax, _subcmd, _help, _handler, 0, 0)
-
+#define SHELL_CMD(_syntax, _subcmd, _help, _handler)		       \
+	{							       \
+		(const char *)STRINGIFY(_syntax), (const char *)_help, \
+		_subcmd, _handler, NULL				       \
+	}
 
 /**
  * @internal @brief Internal shell state in response to data received from the
