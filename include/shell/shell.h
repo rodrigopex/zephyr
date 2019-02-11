@@ -128,6 +128,7 @@ struct shell_static_entry {
  * @param[in] mandatory	Number of mandatory arguments.
  * @param[in] optional	Number of optional arguments.
  */
+ 
 #define SHELL_CMD_ARG_REGISTER(syntax, subcmd, help, handler, mandatory, optional) \
     const struct shell_static_args UTIL_CAT(_shell_args_, syntax)    = {mandatory, \
                                                                      optional}; \
@@ -186,6 +187,25 @@ struct shell_static_entry {
 #define SHELL_CREATE_DYNAMIC_CMD(name, get) \
 	static const struct shell_cmd_entry name = { true, get }
 
+
+/**
+ * @brief Initializes a shell command with arguments.
+ *
+ * @note If a command will be called with wrong number of arguments shell will
+ * print an error message and command handler will not be called.
+ *
+ * @param[in] _syntax	 Command syntax (for example: history).
+ * @param[in] _subcmd	 Pointer to a subcommands array.
+ * @param[in] _help	 Pointer to a command help string.
+ * @param[in] _handler	 Pointer to a function handler.
+ * @param[in] _mandatory Number of mandatory arguments.
+ * @param[in] _optional	 Number of optional arguments.
+ */
+#define SHELL_CMD_ARG(_syntax, _subcmd, _help, _handler,		      \
+		      _mandatory, _optional) {                                 \
+        (const char *) STRINGIFY(_syntax), (const char *) _help, _subcmd, _handler, \
+        NULL                                                                          \
+    }
 
 /**
  * @brief Initializes a shell command.
