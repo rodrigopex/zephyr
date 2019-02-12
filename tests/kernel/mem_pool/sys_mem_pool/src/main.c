@@ -19,13 +19,17 @@
 #define BLK_SIZE_EXCLUDE_DESC (BLK_SIZE_MIN - 16)
 #define BLK_ALIGN BLK_SIZE_MIN
 
-
 K_MUTEX_DEFINE(pool_mutex);
+
 SYS_MEM_POOL_DEFINE(pool, &pool_mutex, BLK_SIZE_MIN, BLK_SIZE_MAX,
-		    BLK_NUM_MAX, BLK_ALIGN, .data);
+		    BLK_NUM_MAX, BLK_ALIGN, ZTEST_SECTION);
 
 /**
  * @brief Verify sys_mem_pool allocation and free
+ *
+ * @ingroup kernel_memory_pool_tests
+ *
+ * @see sys_mem_pool_alloc(), sys_mem_pool_free()
  */
 void test_sys_mem_pool_alloc_free(void)
 {
@@ -58,6 +62,10 @@ void test_sys_mem_pool_alloc_free(void)
 
 /**
  * @brief Verify sys_mem_pool aligned allocation.
+ *
+ * @see sys_mem_pool_alloc(), sys_mem_pool_free()
+ *
+ * @ingroup kernel_memory_pool_tests
  */
 void test_sys_mem_pool_alloc_align4(void)
 {
@@ -82,6 +90,10 @@ void test_sys_mem_pool_alloc_align4(void)
 /**
  * @brief Verify allocation of minimum block size which
  * is 64 bytes
+ *
+ * @ingroup kernel_memory_pool_tests
+ *
+ * @see sys_mem_pool_alloc(), sys_mem_pool_free()
  */
 void test_sys_mem_pool_min_block_size(void)
 {
@@ -114,7 +126,7 @@ void test_sys_mem_pool_min_block_size(void)
 /*test case main entry*/
 void test_main(void)
 {
-	k_thread_access_grant(k_current_get(), &pool_mutex, NULL);
+	k_thread_access_grant(k_current_get(), &pool_mutex);
 	sys_mem_pool_init(&pool);
 
 	ztest_test_suite(test_sys_mem_pool_api,

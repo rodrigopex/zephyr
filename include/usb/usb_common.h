@@ -3,6 +3,7 @@
  *
  * Copyright(c) 2015,2016 Intel Corporation.
  * Copyright(c) 2017 PHYTEC Messtechnik GmbH
+ * Copyright(c) 2018 Nordic Semiconductor ASA
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -41,8 +42,8 @@
 
 #include <version.h>
 
-#ifndef USB_COMMON_H_
-#define USB_COMMON_H_
+#ifndef ZEPHYR_INCLUDE_USB_USB_COMMON_H_
+#define ZEPHYR_INCLUDE_USB_USB_COMMON_H_
 
 #define BCD(x) ((((x) / 10) << 4) | ((x) / 10))
 
@@ -85,6 +86,9 @@
 /* USB 1.1 spec indicates 100mA(max) per unit load, up to 5 loads */
 #define MAX_LOW_POWER			0x32
 #define MAX_HIGH_POWER			0xFA
+
+/* Highest value of Frame Number in SOF packets. */
+#define USB_SOF_MAX			2047
 
 /* bmAttributes:
  * D7:Reserved, always 1,
@@ -198,4 +202,4 @@ struct usb_ep_descriptor {
 	u8_t bInterval;
 } __packed;
 
-#endif /* USB_COMMON_H_ */
+#endif /* ZEPHYR_INCLUDE_USB_USB_COMMON_H_ */

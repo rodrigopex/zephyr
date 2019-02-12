@@ -24,9 +24,6 @@ _ASM_FILE_PROLOGUE
 GTEXT(_ExcExit)
 GTEXT(_IntExit)
 GDATA(_kernel)
-#ifdef CONFIG_TIMESLICING
-GTEXT(_update_time_slice_before_swap)
-#endif
 
 /**
  *
@@ -79,17 +76,6 @@ SECTION_SUBSEC_FUNC(TEXT, _HandlerModeExit, _ExcExit)
     cmp r0, r1
     beq _EXIT_EXC
 
-#ifdef CONFIG_TIMESLICING
-    push {lr}
-    bl _update_time_slice_before_swap
-#if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
-    pop {r0}
-    mov lr, r0
-#else
-    pop {lr}
-#endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
-#endif /* CONFIG_TIMESLICING */
-
     /* context switch required, pend the PendSV exception */
     ldr r1, =_SCS_ICSR
     ldr r2, =_SCS_ICSR_PENDSV
@@ -101,14 +87,13 @@ _EXIT_EXC:
 #endif /* CONFIG_PREEMPT_ENABLED */
 
 #ifdef CONFIG_STACK_SENTINEL
-    push {lr}
+    push {r0, lr}
     bl _check_stack_sentinel
 #if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
-    pop {r0}
-    mov lr, r0
+    pop {r0, r1}
+    mov lr, r1
 #else
-    pop {lr}
+    pop {r0, lr}
 #endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
 #endif /* CONFIG_STACK_SENTINEL */
-
     bx lr

@@ -9,44 +9,47 @@ import textwrap
 
 import kconfiglib
 
-# "Extend" the standard kconfiglib.expr_str() to turn references to defined
-# Kconfig symbols into RST links. Symbol.__str__() will then use the extended
-# version.
-#
-# This is a bit hacky, but better than reimplementing Symbol.__str__() and/or
-# kconfiglib.expr_str().
 
-def expr_str_rst(expr):
-    # Skip constant and undefined symbols by checking if expr.nodes is empty
-    if isinstance(expr, kconfiglib.Symbol) and expr.nodes:
-        # The "\ " avoids RST issues for !CONFIG_FOO -- see
-        # http://docutils.sourceforge.net/docs/ref/rst/restructuredtext.html#character-level-inline-markup
-        return r"\ :option:`{0} <CONFIG_{0}>`".format(expr.name)
+def rst_link(sc):
+    # Returns an RST link (string) for the symbol/choice 'sc', or the normal
+    # Kconfig expression format (e.g. just the name) for 'sc' if it can't be
+    # turned into a link.
 
-    # Choices appear as dependencies of choice symbols.
-    #
-    # Use a :ref: instead of an :option:. With an :option:, we'd have to have
-    # an '.. option::' in the choice reference page as well. That would make
-    # the internal choice ID show up in the documentation.
-    #
-    # Note that the first pair of <...> is non-syntactic here. We just display
-    # choices links within <> in the documentation.
-    if isinstance(expr, kconfiglib.Choice):
+    if isinstance(sc, kconfiglib.Symbol):
+        # Skip constant and undefined symbols by checking if expr.nodes is
+        # empty
+        if sc.nodes:
+            # The "\ " avoids RST issues for !CONFIG_FOO -- see
+            # http://docutils.sourceforge.net/docs/ref/rst/restructuredtext.html#character-level-inline-markup
+            return r"\ :option:`{0} <CONFIG_{0}>`".format(sc.name)
+
+    elif isinstance(sc, kconfiglib.Choice):
+        # Choices appear as dependencies of choice symbols.
+        #
+        # Use a :ref: instead of an :option:. With an :option:, we'd have to have
+        # an '.. option::' in the choice reference page as well. That would make
+        # the internal choice ID show up in the documentation.
+        #
+        # Note that the first pair of <...> is non-syntactic here. We just display
+        # choices links within <> in the documentation.
         return r"\ :ref:`<{}> <{}>`" \
-               .format(choice_desc(expr), choice_id(expr))
+               .format(choice_desc(sc), choice_id(sc))
 
-    # We'll end up back in expr_str_rst() when expr_str_orig() does recursive
-    # calls for subexpressions
-    return expr_str_orig(expr)
-
-expr_str_orig = kconfiglib.expr_str
-kconfiglib.expr_str = expr_str_rst
+    # Can't turn 'sc' into a link. Use the standard Kconfig format.
+    return kconfiglib.standard_sc_expr_str(sc)
 
 
-INDEX_RST_HEADER = """.. _configuration:
+def expr_str(expr):
+    # Returns the Kconfig representation of 'expr', with symbols/choices turned
+    # into RST links
 
-Configuration Symbol Reference
-##############################
+    return kconfiglib.expr_str(expr, rst_link)
+
+
+INDEX_RST_HEADER = """.. _configuration_options:
+
+Configuration Options
+#####################
 
 Introduction
 ************
@@ -77,6 +80,9 @@ Supported Options
 def write_kconfig_rst():
     # The "main" function. Writes index.rst and the symbol RST files.
 
+    # accelerate doc building by skipping kconfig option documentation.
+    turbo_mode = os.environ.get('KCONFIG_TURBO_MODE') == "1"
+
     if len(sys.argv) != 3:
         print("usage: {} <Kconfig> <output directory>", file=sys.stderr)
         sys.exit(1)
@@ -86,15 +92,15 @@ def write_kconfig_rst():
 
     # String with the RST for the index page
     index_rst = INDEX_RST_HEADER
+    index_def_rst = ":orphan:\n\n"
 
-    # - Sort the symbols by name so that they end up in sorted order in
-    #   index.rst
-    #
-    # - Use set() to get rid of duplicates for symbols defined in multiple
-    #   locations.
-    for sym in sorted(set(kconf.defined_syms), key=lambda sym: sym.name):
-        # Write an RST file for the symbol
-        write_sym_rst(sym, out_dir)
+    # Sort the symbols by name so that they end up in sorted order in index.rst
+    for sym in sorted(kconf.unique_defined_syms, key=lambda sym: sym.name):
+        if turbo_mode:
+            index_def_rst += ".. option:: CONFIG_{}\n".format(sym.name)
+        else:
+            # Write an RST file for the symbol
+            write_sym_rst(sym, out_dir)
 
         # Add an index entry for the symbol that links to its RST file. Also
         # list its prompt(s), if any. (A symbol can have multiple prompts if it
@@ -104,9 +110,12 @@ def write_kconfig_rst():
             " / ".join(node.prompt[0]
                        for node in sym.nodes if node.prompt))
 
-    for choice in kconf.choices:
-        # Write an RST file for the choice
-        write_choice_rst(choice, out_dir)
+    if turbo_mode:
+        write_if_updated(os.path.join(out_dir, "options.rst"), index_def_rst)
+    else:
+        for choice in kconf.unique_choices:
+            # Write an RST file for the choice
+            write_choice_rst(choice, out_dir)
 
     write_if_updated(os.path.join(out_dir, "index.rst"), index_rst)
 
@@ -120,6 +129,7 @@ def write_sym_rst(sym, out_dir):
                      direct_deps_rst(sym) +
                      defaults_rst(sym) +
                      select_imply_rst(sym) +
+                     selecting_implying_rst(sym) +
                      kconfig_definition_rst(sym))
 
 
@@ -202,7 +212,7 @@ def direct_deps_rst(sc):
            "===================\n\n" \
            "{}\n\n" \
            "*(Includes any dependencies from if's and menus.)*\n\n" \
-           .format(kconfiglib.expr_str(sc.direct_dep))
+           .format(expr_str(sc.direct_dep))
 
 
 def defaults_rst(sc):
@@ -219,9 +229,9 @@ def defaults_rst(sc):
 
     if sc.defaults:
         for value, cond in sc.defaults:
-            rst += "- " + kconfiglib.expr_str(value)
+            rst += "- " + expr_str(value)
             if cond is not sc.kconfig.y:
-                rst += " if " + kconfiglib.expr_str(cond)
+                rst += " if " + expr_str(cond)
             rst += "\n"
 
     else:
@@ -250,53 +260,95 @@ def choice_syms_rst(choice):
 
     for sym in choice.syms:
         # Generates a link
-        rst += "- {}\n".format(kconfiglib.expr_str(sym))
+        rst += "- {}\n".format(expr_str(sym))
 
     return rst + "\n"
 
 
 def select_imply_rst(sym):
+    # Returns RST that lists the symbols 'select'ed or 'imply'd by the symbol
+
+    rst = ""
+
+    def add_select_imply_rst(type_str, lst):
+        # Adds RST that lists the selects/implies from 'lst', which holds
+        # (<symbol>, <condition>) tuples, if any. Also adds a heading derived
+        # from 'type_str' if there any selects/implies.
+
+        nonlocal rst
+
+        if lst:
+            heading = "Symbols {} by this symbol".format(type_str)
+            rst += "{}\n{}\n\n".format(heading, len(heading)*"=")
+
+            for select, cond in lst:
+                rst += "- " + rst_link(select)
+                if cond is not sym.kconfig.y:
+                    rst += " if " + expr_str(cond)
+                rst += "\n"
+
+            rst += "\n"
+
+    add_select_imply_rst("selected", sym.selects)
+    add_select_imply_rst("implied", sym.implies)
+
+    return rst
+
+
+def selecting_implying_rst(sym):
     # Returns RST that lists the symbols that are 'select'ing or 'imply'ing the
     # symbol
 
     rst = ""
 
-    def add_select_imply_rst(type_str, expr):
-        # Writes a link for each selecting symbol (if 'expr' is sym.rev_dep) or
-        # each implying symbol (if 'expr' is sym.weak_rev_dep). Also adds a
-        # heading at the top, derived from type_str ("select"/"imply").
+    def add_selecting_implying_rst(type_str, expr):
+        # Writes a link for each symbol that selects the symbol (if 'expr' is
+        # sym.rev_dep) or each symbol that imply's the symbol (if 'expr' is
+        # sym.weak_rev_dep). Also adds a heading at the top derived from
+        # type_str ("select"/"imply"), if there are any selecting/implying
+        # symbols.
 
         nonlocal rst
 
-        heading = "Symbols that ``{}`` this symbol".format(type_str)
-        rst += "{}\n{}\n\n".format(heading, len(heading)*"=")
+        if expr is not sym.kconfig.n:
+            heading = "Symbols that {} this symbol".format(type_str)
+            rst += "{}\n{}\n\n".format(heading, len(heading)*"=")
 
-        # The reverse dependencies from each select/imply are ORed together
-        for select in kconfiglib.split_expr(expr, kconfiglib.OR):
-            # - 'select/imply A if B' turns into A && B
-            # - 'select/imply A' just turns into A
-            #
-            # In both cases, we can split on AND and pick the first
-            # operand.
+            # The reverse dependencies from each select/imply are ORed together
+            for select in kconfiglib.split_expr(expr, kconfiglib.OR):
+                # - 'select/imply A if B' turns into A && B
+                # - 'select/imply A' just turns into A
+                #
+                # In both cases, we can split on AND and pick the first
+                # operand.
 
-            # kconfiglib.expr_str() generates a link
-            rst += "- {}\n".format(kconfiglib.expr_str(
-                kconfiglib.split_expr(select, kconfiglib.AND)[0]))
+                rst += "- {}\n".format(rst_link(
+                    kconfiglib.split_expr(select, kconfiglib.AND)[0]))
 
-        rst += "\n"
+            rst += "\n"
 
-    if sym.rev_dep is not sym.kconfig.n:
-        add_select_imply_rst("select", sym.rev_dep)
-
-    if sym.weak_rev_dep is not sym.kconfig.n:
-        add_select_imply_rst("imply", sym.weak_rev_dep)
+    add_selecting_implying_rst("select", sym.rev_dep)
+    add_selecting_implying_rst("imply", sym.weak_rev_dep)
 
     return rst
 
 
 def kconfig_definition_rst(sc):
-    # Returns RST that lists the Kconfig definition(s) of 'sc' (symbol or
-    # choice)
+    # Returns RST that lists the Kconfig definition location, include path,
+    # menu path, and Kconfig definition for each node (definition location) of
+    # 'sc' (symbol or choice)
+
+    # Fancy Unicode arrow. Added in '93, so ought to be pretty safe.
+    arrow = " \N{RIGHTWARDS ARROW} "
+
+    def include_path(node):
+        if not node.include_path:
+            # In the top-level Kconfig file
+            return ""
+
+        return "Included via {}\n\n".format(
+            arrow.join("``{}:{}``".format(filename, linenr)
+                       for filename, linenr in node.include_path))
 
     def menu_path(node):
         path = ""
@@ -314,8 +366,14 @@ def kconfig_definition_rst(sc):
             if node is node.kconfig.top_node:
                 break
 
-            # Fancy Unicode arrow. Added in '93, so ought to be pretty safe.
-            path = " → " + node.prompt[0] + path
+            # Promptless choices can show up as parents, e.g. when people
+            # define choices in multiple locations to add symbols. Use
+            # standard_sc_expr_str() to show them. That way they show up as
+            # '<choice (name if any)>'.
+            path = arrow + \
+                   (node.prompt[0] if node.prompt else
+                    kconfiglib.standard_sc_expr_str(node.item)) + \
+                   path
 
         return "(top menu)" + path
 
@@ -323,14 +381,22 @@ def kconfig_definition_rst(sc):
     if len(sc.nodes) > 1: heading += "s"
     rst = "{}\n{}\n\n".format(heading, len(heading)*"=")
 
-    rst += ".. highlight:: kconfig\n\n"
+    rst += ".. highlight:: kconfig"
 
-    rst += "\n\n".join(
-        "At ``{}:{}``, in menu ``{}``:\n\n"
-        ".. parsed-literal::\n\n"
-        "{}".format(node.filename, node.linenr, menu_path(node),
-                    textwrap.indent(str(node), " "*4))
-        for node in sc.nodes)
+    for node in sc.nodes:
+        rst += "\n\n" \
+               "At ``{}:{}``\n\n" \
+               "{}" \
+               "Menu path: {}\n\n" \
+               ".. parsed-literal::\n\n{}" \
+               .format(node.filename, node.linenr,
+                       include_path(node), menu_path(node),
+                       textwrap.indent(node.custom_str(rst_link), 4*" "))
+
+        # Not the last node?
+        if node is not sc.nodes[-1]:
+            # Add a horizontal line between multiple definitions
+            rst += "\n\n----"
 
     rst += "\n\n*(Definitions include propagated dependencies, " \
            "including from if's and menus.)*"

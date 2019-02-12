@@ -6,8 +6,9 @@
 #include <ztest.h>
 #include <kernel.h>
 #include <kernel_structs.h>
+#include <kernel_internal.h>
 
-__kernel struct k_thread kthread_thread;
+struct k_thread kthread_thread;
 
 #define STACKSIZE 1024
 K_THREAD_STACK_DEFINE(kthread_stack, STACKSIZE);

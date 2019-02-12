@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef TOOLCHAIN_GCC_H
-#define TOOLCHAIN_GCC_H
+#ifndef ZEPHYR_INCLUDE_TOOLCHAIN_GCC_H_
+#define ZEPHYR_INCLUDE_TOOLCHAIN_GCC_H_
+
 /**
  * @file
  * @brief GCC toolchain abstraction
@@ -28,6 +29,7 @@
 #endif
 
 #include <toolchain/common.h>
+#include <stdbool.h>
 
 #define ALIAS_OF(of) __attribute__((alias(#of)))
 
@@ -85,7 +87,7 @@ do {                                                                    \
 	} *__p = (__typeof__(__p)) (p);                                 \
 	__p->__v = (v);                                                 \
 	compiler_barrier();                                             \
-} while (0)
+} while (false)
 
 #else
 
@@ -95,7 +97,7 @@ do {                                                                    \
 		__typeof__(*p) __v;                                     \
 	} *__p = (__typeof__(__p)) (p);                                 \
 	__p->__v = (v);                                               \
-} while (0)
+} while (false)
 
 #endif
 
@@ -113,16 +115,6 @@ do {                                                                    \
 
 #define __in_section_unique(seg) ___in_section(seg, __FILE__, __COUNTER__)
 
-#ifdef CONFIG_APPLICATION_MEMORY
-#define __kernel	__in_section_unique(kernel)
-#define __kernel_noinit	__in_section_unique(kernel_noinit)
-#define __kernel_bss	__in_section_unique(kernel_bss)
-#else
-#define __kernel
-#define __kernel_noinit	__noinit
-#define __kernel_bss
-#endif
-
 #ifndef __packed
 #define __packed        __attribute__((__packed__))
 #endif
@@ -137,8 +129,8 @@ do {                                                                    \
 #define __deprecated	__attribute__((deprecated))
 #define ARG_UNUSED(x) (void)(x)
 
-#define likely(x)   __builtin_expect((long)!!(x), 1L)
-#define unlikely(x) __builtin_expect((long)!!(x), 0L)
+#define likely(x)   __builtin_expect((bool)!!(x), true)
+#define unlikely(x) __builtin_expect((bool)!!(x), false)
 
 #define popcount(x) __builtin_popcount(x)
 
@@ -345,6 +337,13 @@ A##a:
 		",%c0"                              \
 		"\n\t.type\t" #name ",@object" :  : "n"(value))
 
+#elif defined(CONFIG_X86_64)
+
+#define GEN_ABSOLUTE_SYM(name, value)               \
+	__asm__(".globl\t" #name "\n\t.equ\t" #name \
+		",%0"                               \
+		"\n\t.type\t" #name ",@object" :  : "n"(value))
+
 #elif defined(CONFIG_NIOS2) || defined(CONFIG_RISCV32) || defined(CONFIG_XTENSA)
 
 /* No special prefixes necessary for constants in this arch AFAICT */
@@ -364,6 +363,6 @@ A##a:
 
 #define compiler_barrier() do { \
 	__asm__ __volatile__ ("" ::: "memory"); \
-} while ((0))
+} while (false)
 
-#endif /* TOOLCHAIN_GCC_H */
+#endif /* ZEPHYR_INCLUDE_TOOLCHAIN_GCC_H_ */

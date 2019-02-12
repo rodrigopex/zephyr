@@ -4,12 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define NET_SYS_LOG_LEVEL CONFIG_OPENTHREAD_L2_LOG_LEVEL
-
-#if defined(CONFIG_OPENTHREAD_L2_DEBUG)
-#define NET_DOMAIN "net/openthread_l2"
-#define NET_LOG_ENABLED 1
-#endif
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_l2_openthread, CONFIG_OPENTHREAD_L2_LOG_LEVEL);
 
 #include <net/net_core.h>
 #include <net/net_pkt.h>
@@ -21,9 +17,15 @@
 #include <init.h>
 #include <misc/util.h>
 #include <misc/__assert.h>
-#include <openthread/openthread.h>
+
 #include <openthread/cli.h>
-#include <platform.h>
+#include <openthread/ip6.h>
+#include <openthread/link.h>
+#include <openthread/message.h>
+#include <openthread/tasklet.h>
+#include <openthread/thread.h>
+#include <openthread-system.h>
+
 #include <platform-zephyr.h>
 
 #include "openthread_utils.h"
@@ -66,7 +68,7 @@ void otTaskletsSignalPending(otInstance *instance)
 	k_sem_give(&ot_sem);
 }
 
-void PlatformEventSignalPending(void)
+void otSysEventSignalPending(void)
 {
 	k_sem_give(&ot_sem);
 }
@@ -80,26 +82,35 @@ void ot_state_changed_handler(uint32_t flags, void *context)
 
 	if (flags & OT_CHANGED_IP6_ADDRESS_REMOVED) {
 		NET_DBG("Ipv6 address removed");
-		rm_ipv6_maddr_from_zephyr(ot_context);
+		rm_ipv6_addr_from_zephyr(ot_context);
 	}
 
 	if (flags & OT_CHANGED_IP6_ADDRESS_ADDED) {
 		NET_DBG("Ipv6 address added");
-		add_ipv6_maddr_to_zephyr(ot_context);
+		add_ipv6_addr_to_zephyr(ot_context);
 	}
 
+	if (flags & OT_CHANGED_IP6_MULTICAST_UNSUBSRCRIBED) {
+		NET_DBG("Ipv6 multicast address removed");
+		rm_ipv6_maddr_from_zephyr(ot_context);
+	}
+
+	if (flags & OT_CHANGED_IP6_MULTICAST_SUBSRCRIBED) {
+		NET_DBG("Ipv6 multicast address added");
+		add_ipv6_maddr_to_zephyr(ot_context);
+	}
 }
 
 void ot_receive_handler(otMessage *aMessage, void *context)
 {
 	struct openthread_context *ot_context = context;
 
-	u16_t offset = 0;
+	u16_t offset = 0U;
 	u16_t read_len;
 	struct net_pkt *pkt;
 	struct net_buf *prev_buf = NULL;
 
-	pkt = net_pkt_get_reserve_rx(0, K_NO_WAIT);
+	pkt = net_pkt_get_reserve_rx(K_NO_WAIT);
 	if (!pkt) {
 		NET_ERR("Failed to reserve net pkt");
 		goto out;
@@ -172,7 +183,7 @@ static void openthread_process(void *context, void *arg2, void *arg3)
 			otTaskletsProcess(ot_context->instance);
 		}
 
-		PlatformProcessDrivers(ot_context->instance);
+		otSysProcessDrivers(ot_context->instance);
 
 		k_sem_take(&ot_sem, K_FOREVER);
 	}
@@ -201,8 +212,8 @@ static enum net_verdict openthread_recv(struct net_if *iface,
 	/* Length inc. CRC. */
 	recv_frame.mLength = net_buf_frags_len(pkt->frags);
 	recv_frame.mChannel = platformRadioChannelGet(ot_context->instance);
-	recv_frame.mLqi = net_pkt_ieee802154_lqi(pkt);
-	recv_frame.mRssi = net_pkt_ieee802154_rssi(pkt);
+	recv_frame.mInfo.mRxInfo.mLqi = net_pkt_ieee802154_lqi(pkt);
+	recv_frame.mInfo.mRxInfo.mRssi = net_pkt_ieee802154_rssi(pkt);
 
 #if defined(CONFIG_OPENTHREAD_L2_DEBUG_DUMP_15_4)
 	net_hexdump_frags("Received 802.15.4 frame", pkt, true);
@@ -224,16 +235,19 @@ static enum net_verdict openthread_recv(struct net_if *iface,
 	return NET_OK;
 }
 
-enum net_verdict openthread_send(struct net_if *iface, struct net_pkt *pkt)
+int openthread_send(struct net_if *iface, struct net_pkt *pkt)
 {
 	struct openthread_context *ot_context = net_if_l2_data(iface);
-	enum net_verdict ret = NET_OK;
-	otMessage *message;
+	int len = net_pkt_get_len(pkt);
 	struct net_buf *frag;
+	otMessage *message;
+	otMessageSettings settings;
 
 	NET_DBG("Sending Ip6 packet to ot stack");
 
-	message = otIp6NewMessage(ot_context->instance, true);
+	settings.mPriority = OT_MESSAGE_PRIORITY_NORMAL;
+	settings.mLinkSecurityEnabled = true;
+	message = otIp6NewMessage(ot_context->instance, &settings);
 	if (message == NULL) {
 		goto exit;
 	}
@@ -260,15 +274,7 @@ enum net_verdict openthread_send(struct net_if *iface, struct net_pkt *pkt)
 exit:
 	net_pkt_unref(pkt);
 
-	return ret;
-}
-
-static u16_t openthread_reserve(struct net_if *iface, void *arg)
-{
-	ARG_UNUSED(iface);
-	ARG_UNUSED(arg);
-
-	return 0;
+	return len;
 }
 
 enum net_verdict ieee802154_radio_handle_ack(struct net_if *iface,
@@ -284,10 +290,13 @@ enum net_verdict ieee802154_radio_handle_ack(struct net_if *iface,
 static int openthread_init(struct net_if *iface)
 {
 	struct openthread_context *ot_context = net_if_l2_data(iface);
+	otExtendedPanId xpanid;
+
+	net_bytes_from_str(xpanid.m8, 8, (char *)CONFIG_OPENTHREAD_XPANID);
 
 	NET_DBG("openthread_init");
 
-	PlatformInit(0, NULL);
+	otSysInit(0, NULL);
 
 	ot_context->instance = otInstanceInitSingle();
 	ot_context->iface = iface;
@@ -300,11 +309,14 @@ static int openthread_init(struct net_if *iface)
 
 	NET_INFO("OpenThread version: %s",
 		    otGetVersionString());
+
+	otThreadSetNetworkName(ot_context->instance, CONFIG_OPENTHREAD_NETWORK_NAME);
 	NET_INFO("Network name:   %s",
-		    otThreadGetNetworkName(ot_context->instance));
+		 log_strdup(otThreadGetNetworkName(ot_context->instance)));
 
 	otLinkSetChannel(ot_context->instance, CONFIG_OPENTHREAD_CHANNEL);
 	otLinkSetPanId(ot_context->instance, CONFIG_OPENTHREAD_PANID);
+	otThreadSetExtendedPanId(ot_context->instance, &xpanid);
 	otIp6SetEnabled(ot_context->instance, true);
 	otThreadSetEnabled(ot_context->instance, true);
 	otIp6SetReceiveFilterEnabled(ot_context->instance, true);
@@ -325,6 +337,7 @@ static int openthread_init(struct net_if *iface)
 				 openthread_process,
 				 ot_context, NULL, NULL,
 				 OT_PRIORITY, 0, K_NO_WAIT);
+	k_thread_name_set(&ot_thread_data, "openthread");
 
 	return 0;
 }
@@ -334,16 +347,10 @@ void ieee802154_init(struct net_if *iface)
 	openthread_init(iface);
 }
 
-int ieee802154_radio_send(struct net_if *iface, struct net_pkt *pkt)
+static enum net_l2_flags openthread_flags(struct net_if *iface)
 {
-	ARG_UNUSED(iface);
-	ARG_UNUSED(pkt);
-
-	/* Shouldn't be here */
-	__ASSERT(false, "OpenThread L2 should never reach here");
-
-	return -EIO;
+	return NET_L2_MULTICAST;
 }
 
 NET_L2_INIT(OPENTHREAD_L2, openthread_recv, openthread_send,
-	    openthread_reserve, NULL);
+	    NULL, openthread_flags);

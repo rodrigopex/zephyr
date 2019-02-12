@@ -7,7 +7,7 @@
 #include <ztest.h>
 #include <atomic.h>
 #define LOOP 10
-#define STACK_SIZE 512
+#define STACK_SIZE (512 + CONFIG_TEST_EXTRA_STACKSIZE)
 #define THREAD_NUM 4
 #define SLAB_NUM 2
 #define TIMEOUT 200
@@ -43,7 +43,7 @@ static void tmslab_api(void *p1, void *p2, void *p3)
 	int i = LOOP, ret;
 
 	while (i--) {
-		memset(block, 0, sizeof(block));
+		(void)memset(block, 0, sizeof(block));
 
 		for (int i = 0; i < BLK_NUM; i++) {
 			ret = k_mem_slab_alloc(slab, &block[i], TIMEOUT);
@@ -67,6 +67,8 @@ static void tmslab_api(void *p1, void *p2, void *p3)
  * @details Test creates 4 preemptive threads of equal priority. Then
  * validates the synchronization of threads by allocating and
  * freeing up the memory blocks in memory slab.
+ *
+ * @ingroup kernel_memory_slab_tests
  */
 void test_mslab_threadsafe(void)
 {

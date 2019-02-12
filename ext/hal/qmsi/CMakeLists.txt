@@ -1,31 +1,18 @@
 zephyr_library()
 
 zephyr_compile_definitions(                                  ENABLE_EXTERNAL_ISR_HANDLING)
-zephyr_compile_definitions_ifdef(CONFIG_SYS_POWER_DEEP_SLEEP ENABLE_RESTORE_CONTEXT)
-
-if(CONFIG_QMSI_LIBRARY)
-  zephyr_include_directories(
-    ${CONFIG_QMSI_INSTALL_PATH}/include
-    )
-
-  zephyr_link_libraries(
-    qmsi
-    -L${CONFIG_QMSI_INSTALL_PATH}/lib
-    )
-endif()
+zephyr_compile_definitions_ifdef(CONFIG_SYS_POWER_DEEP_SLEEP_STATES ENABLE_RESTORE_CONTEXT)
 
 if(CONFIG_SOC_QUARK_SE_C1000_SS)
 set(SOC_SERIES quark_se)
 endif()
 
-if(CONFIG_QMSI_BUILTIN)
-  zephyr_include_directories(
-    include
-    drivers/include
-    )
-  zephyr_include_directories_ifdef(CONFIG_ARC drivers/sensor/include)
-  zephyr_include_directories(                 soc/${SOC_SERIES}/include)
-endif()
+zephyr_include_directories(
+  include
+  drivers/include
+  )
+zephyr_include_directories_ifdef(CONFIG_ARC drivers/sensor/include)
+zephyr_include_directories(                 soc/${SOC_SERIES}/include)
 
 set_ifndef(SOC_WATCH_ENABLE 0)
 if(CONFIG_SOC_WATCH)
@@ -33,26 +20,22 @@ if(CONFIG_SOC_WATCH)
   zephyr_compile_definitions(SOC_WATCH_ENABLE)
 endif()
 
-if(CONFIG_QMSI_BUILTIN)
+zephyr_library_sources(
+  drivers/flash/qm_flash.c
+  soc/${SOC_SERIES}/drivers/power_states.c
+  soc/${SOC_SERIES}/drivers/clk.c
+  )
+if(CONFIG_SOC_QUARK_SE_C1000_SS)
   zephyr_library_sources(
-    drivers/flash/qm_flash.c
-    soc/${SOC_SERIES}/drivers/power_states.c
-    soc/${SOC_SERIES}/drivers/clk.c
+    drivers/clk/ss_clk.c
+    soc/quark_se/drivers/vreg.c
+    soc/quark_se/drivers/ss_power_states.c
     )
-  if(CONFIG_SOC_QUARK_SE_C1000_SS)
-    zephyr_library_sources(
-      drivers/clk/ss_clk.c
-      soc/quark_se/drivers/vreg.c
-      soc/quark_se/drivers/ss_power_states.c
-      )
-  endif()
-  if(CONFIG_SOC_QUARK_SE_C1000)
-    zephyr_library_sources(soc/${SOC_SERIES}/drivers/vreg.c)
-  endif()
+endif()
+if(CONFIG_SOC_QUARK_SE_C1000)
+  zephyr_library_sources(soc/${SOC_SERIES}/drivers/vreg.c)
 endif()
 
-zephyr_library_sources_ifdef(CONFIG_ADC_QMSI             drivers/adc/qm_adc.c)
-zephyr_library_sources_ifdef(CONFIG_ADC_QMSI_SS          drivers/adc/qm_ss_adc.c)
 zephyr_library_sources_ifdef(CONFIG_AIO_COMPARATOR_QMSI  drivers/comparator/qm_comparator.c)
 zephyr_library_sources_ifdef(CONFIG_AON_COUNTER_QMSI     drivers/aon_counters/qm_aon_counters.c)
 zephyr_library_sources_ifdef(CONFIG_DMA_QMSI             drivers/dma/qm_dma.c)

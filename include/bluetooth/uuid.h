@@ -7,8 +7,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef __BT_UUID_H
-#define __BT_UUID_H
+#ifndef ZEPHYR_INCLUDE_BLUETOOTH_UUID_H_
+#define ZEPHYR_INCLUDE_BLUETOOTH_UUID_H_
 
 /**
  * @brief UUIDs
@@ -387,6 +387,10 @@ struct bt_uuid_128 {
  *  @brief Barometric Pressure Trend Characteristic
  */
 #define BT_UUID_BAR_PRESSURE_TREND        BT_UUID_DECLARE_16(0x2aa3)
+/** @def BT_UUID_CENTRAL_ADDR_RES
+ *  @brief Central Address Resolution Characteristic
+ */
+#define BT_UUID_CENTRAL_ADDR_RES          BT_UUID_DECLARE_16(0x2aa6)
 /** @def BT_UUID_MESH_PROV_DATA_IN
  *  @brief Mesh Provisioning Data In
  */
@@ -403,6 +407,14 @@ struct bt_uuid_128 {
  *  @brief Mesh Proxy Data Out
  */
 #define BT_UUID_MESH_PROXY_DATA_OUT       BT_UUID_DECLARE_16(0x2ade)
+/** @def BT_UUID_GATT_CLIENT_FEATURES
+ *  @brief Client Supported Features
+ */
+#define BT_UUID_GATT_CLIENT_FEATURES      BT_UUID_DECLARE_16(0x2b29)
+/** @def BT_UUID_GATT_DB_HASH
+ *  @brief Database Hash
+ */
+#define BT_UUID_GATT_DB_HASH              BT_UUID_DECLARE_16(0x2b2a)
 
 /*
  * Protocol UUIDs
@@ -492,4 +504,4 @@ static inline const char *bt_uuid_str(const struct bt_uuid *uuid)
  * @}
  */
 
-#endif /* __BT_UUID_H */
+#endif /* ZEPHYR_INCLUDE_BLUETOOTH_UUID_H_ */

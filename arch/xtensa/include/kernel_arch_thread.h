@@ -17,8 +17,8 @@
  * necessary to instantiate instances of struct k_thread.
  */
 
-#ifndef _kernel_arch_thread__h_
-#define _kernel_arch_thread__h_
+#ifndef ZEPHYR_ARCH_XTENSA_INCLUDE_KERNEL_ARCH_THREAD_H_
+#define ZEPHYR_ARCH_XTENSA_INCLUDE_KERNEL_ARCH_THREAD_H_
 
 #ifndef _ASMLANGUAGE
 #include <zephyr/types.h>
@@ -107,9 +107,6 @@ struct _thread_arch {
 	 * fixed offset to read the 'flags' field.
 	 */
 	u32_t flags;
-#ifdef CONFIG_THREAD_CUSTOM_DATA
-	void *custom_data;     /* available for custom use */
-#endif
 #ifdef CONFIG_ERRNO
 	int errno_var;
 #endif
@@ -138,5 +135,5 @@ typedef struct _thread_arch _thread_arch_t;
 
 #endif /* _ASMLANGUAGE */
 
-#endif /* _kernel_arch_thread__h_ */
+#endif /* ZEPHYR_ARCH_XTENSA_INCLUDE_KERNEL_ARCH_THREAD_H_ */
 

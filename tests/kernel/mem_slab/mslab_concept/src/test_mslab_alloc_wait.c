@@ -8,7 +8,7 @@
 #include "test_mslab.h"
 
 #define THREAD_NUM 3
-#define STACK_SIZE 512
+#define STACK_SIZE (512 + CONFIG_TEST_EXTRA_STACKSIZE)
 
 K_MEM_SLAB_DEFINE(mslab1, BLK_SIZE, BLK_NUM, BLK_ALIGN);
 
@@ -42,6 +42,8 @@ void tmslab_alloc_wait_ok(void *p1, void *p2, void *p3)
  * same priority higher than first thread with delay 10ms and
  * 20ms. Checks the behavior of alloc when requested by multiple
  * threads
+ *
+ * @ingroup kernel_memory_slab_tests
  *
  * @see k_mem_slab_alloc()
  * @see k_mem_slab_free()

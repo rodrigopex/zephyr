@@ -6,6 +6,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <logging/log.h>
+LOG_MODULE_DECLARE(net_config, CONFIG_NET_CONFIG_LOG_LEVEL);
+
 #include <zephyr.h>
 #include <errno.h>
 
@@ -18,7 +21,7 @@
 #include <bluetooth/uuid.h>
 #include <bluetooth/gatt.h>
 
-#if defined(CONFIG_NET_APP_BT_NODE)
+#if defined(CONFIG_NET_CONFIG_BT_NODE)
 #define ADV_STR "on"
 
 static struct bt_gatt_attr attrs[] = {
@@ -29,7 +32,7 @@ static struct bt_gatt_attr attrs[] = {
 static struct bt_gatt_service ipss_svc = BT_GATT_SERVICE(attrs);
 #endif
 
-int _net_app_bt_setup(void)
+int _net_config_bt_setup(void)
 {
 	struct net_if *iface;
 	struct device *dev;
@@ -50,7 +53,7 @@ int _net_app_bt_setup(void)
 		return -EINVAL;
 	}
 
-#if defined(CONFIG_NET_APP_BT_NODE)
+#if defined(CONFIG_NET_CONFIG_BT_NODE)
 	bt_gatt_service_register(&ipss_svc);
 
 	if (net_mgmt(NET_REQUEST_BT_ADVERTISE, iface, ADV_STR,

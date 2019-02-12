@@ -11,8 +11,8 @@
  * included by the generic kernel interface header (include/arch/cpu.h)
  */
 
-#ifndef _ARCH_IFACE_H
-#define _ARCH_IFACE_H
+#ifndef ZEPHYR_INCLUDE_ARCH_NIOS2_ARCH_H_
+#define ZEPHYR_INCLUDE_ARCH_NIOS2_ARCH_H_
 
 #include <system.h>
 #include <arch/nios2/asm_inline.h>
@@ -200,6 +200,14 @@ enum nios2_exception_cause {
 
 extern u32_t _timer_cycle_get_32(void);
 #define _arch_k_cycle_get_32()	_timer_cycle_get_32()
+
+/**
+ * @brief Explicitly nop operation.
+ */
+static ALWAYS_INLINE void arch_nop(void)
+{
+	__asm__ volatile("nop");
+}
 
 #endif /* _ASMLANGUAGE */
 

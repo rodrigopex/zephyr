@@ -19,7 +19,6 @@
 
 #include <net/socket.h>
 #include <kernel.h>
-#include <net/net_app.h>
 
 #include <net/buf.h>
 

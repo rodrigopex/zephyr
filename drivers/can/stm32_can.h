@@ -5,8 +5,8 @@
  *
  */
 
-#ifndef _STM32_CAN_H_
-#define _STM32_CAN_H_
+#ifndef ZEPHYR_DRIVERS_CAN_STM32_CAN_H_
+#define ZEPHYR_DRIVERS_CAN_STM32_CAN_H_
 
 #include <can.h>
 
@@ -17,7 +17,7 @@
 #define BIT_SEG_LENGTH(cfg) ((cfg)->prop_bs1 + (cfg)->bs2 + 1)
 
 #define CAN_NUMBER_OF_FILTER_BANKS (14)
-#define CAN_MAX_NUMBER_OF_FILTES (CAN_NUMBER_OF_FILTER_BANKS * 4)
+#define CAN_MAX_NUMBER_OF_FILTERS (CAN_NUMBER_OF_FILTER_BANKS * 4)
 
 #define CAN_FIRX_STD_IDE_POS   (3U)
 #define CAN_FIRX_STD_RTR_POS   (4U)
@@ -67,11 +67,11 @@ struct can_stm32_data {
 struct can_stm32_config {
 	CAN_TypeDef *can;   /*!< CAN Registers*/
 	u32_t bus_speed;
-	u8_t swj;
+	u8_t sjw;
 	u8_t prop_bs1;
 	u8_t bs2;
 	struct stm32_pclken pclken;
 	void (*config_irq)(CAN_TypeDef *can);
 };
 
-#endif /*_STM32_CAN_H_*/
+#endif /*ZEPHYR_DRIVERS_CAN_STM32_CAN_H_*/

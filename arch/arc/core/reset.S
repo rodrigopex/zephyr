@@ -88,9 +88,9 @@ invalidate_dcache:
 
 done_cache_invalidate:
 
-#if defined(CONFIG_SYS_POWER_DEEP_SLEEP) && \
+#if defined(CONFIG_SYS_POWER_DEEP_SLEEP_STATES) && \
 	!defined(CONFIG_BOOTLOADER_CONTEXT_RESTORE)
-        jl @_sys_soc_resume_from_deep_sleep
+        jl @sys_resume_from_deep_sleep
 #endif
 
 #ifdef CONFIG_INIT_STACKS

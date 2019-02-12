@@ -9,25 +9,26 @@
  *
  */
 
-#ifndef _STM32_UART_H_
-#define _STM32_UART_H_
+#ifndef ZEPHYR_DRIVERS_SERIAL_UART_STM32_H_
+#define ZEPHYR_DRIVERS_SERIAL_UART_STM32_H_
 
 /* device config */
 struct uart_stm32_config {
 	struct uart_device_config uconf;
 	/* clock subsystem driving this peripheral */
 	struct stm32_pclken pclken;
-	/* Baud rate */
-	u32_t baud_rate;
 };
 
 /* driver data */
 struct uart_stm32_data {
+	/* Baud rate */
+	u32_t baud_rate;
 	/* clock device */
 	struct device *clock;
 #ifdef CONFIG_UART_INTERRUPT_DRIVEN
-	uart_irq_callback_t user_cb;
+	uart_irq_callback_user_data_t user_cb;
+	void *user_data;
 #endif
 };
 
-#endif	/* _STM32_UART_H_ */
+#endif	/* ZEPHYR_DRIVERS_SERIAL_UART_STM32_H_ */

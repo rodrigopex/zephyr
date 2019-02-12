@@ -4,13 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if defined(CONFIG_NET_DEBUG_GPTP)
-#define SYS_LOG_DOMAIN "net/gptp"
-#define NET_LOG_ENABLED 1
-#endif
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_gptp, CONFIG_NET_GPTP_LOG_LEVEL);
 
 #include <net/net_pkt.h>
 #include <ptp_clock.h>
+#include <net/ethernet_mgmt.h>
 
 #include <net/gptp.h>
 
@@ -37,6 +36,7 @@ NET_STACK_DEFINE(GPTP, gptp_stack, CONFIG_NET_GPTP_STACK_SIZE,
 		CONFIG_NET_GPTP_STACK_SIZE);
 K_FIFO_DEFINE(gptp_rx_queue);
 
+static k_tid_t tid;
 static struct k_thread gptp_thread_data;
 struct gptp_domain gptp_domain;
 
@@ -86,6 +86,10 @@ static void gptp_compute_clock_identity(int port)
 	}
 }
 
+/* Note that we do not use log_strdup() here when printing msg as currently the
+ * msg variable is always a const string that is not allocated from the stack.
+ * If this changes at some point, then add log_strdup(msg) here.
+ */
 #define PRINT_INFO(msg, hdr, pkt)				\
 	NET_DBG("Received %s seq %d pkt %p", msg,		\
 		ntohs(hdr->sequence_id), pkt)			\
@@ -101,7 +105,7 @@ static bool gptp_handle_critical_msg(struct net_if *iface, struct net_pkt *pkt)
 	case GPTP_PATH_DELAY_REQ_MESSAGE:
 		if (GPTP_CHECK_LEN(pkt, GPTP_PDELAY_REQ_LEN)) {
 			NET_WARN("Invalid length for %s packet "
-				 "should have %zd bytes but has %lu bytes",
+				 "should have %zd bytes but has %zd bytes",
 				 "PDELAY_REQ",
 				 GPTP_PDELAY_REQ_LEN,
 				 GPTP_PACKET_LEN(pkt));
@@ -153,7 +157,7 @@ static void gptp_handle_msg(struct net_pkt *pkt)
 	case GPTP_SYNC_MESSAGE:
 		if (GPTP_CHECK_LEN(pkt, GPTP_SYNC_LEN)) {
 			NET_WARN("Invalid length for %s packet "
-				 "should have %zd bytes but has %lu bytes",
+				 "should have %zd bytes but has %zd bytes",
 				 "SYNC",
 				 GPTP_SYNC_LEN,
 				 GPTP_PACKET_LEN(pkt));
@@ -195,7 +199,7 @@ static void gptp_handle_msg(struct net_pkt *pkt)
 	case GPTP_PATH_DELAY_RESP_MESSAGE:
 		if (GPTP_CHECK_LEN(pkt, GPTP_PDELAY_RESP_LEN)) {
 			NET_WARN("Invalid length for %s packet "
-				 "should have %zd bytes but has %lu bytes",
+				 "should have %zd bytes but has %zd bytes",
 				 "PDELAY_RESP",
 				 GPTP_PDELAY_RESP_LEN,
 				 GPTP_PACKET_LEN(pkt));
@@ -220,7 +224,7 @@ static void gptp_handle_msg(struct net_pkt *pkt)
 	case GPTP_FOLLOWUP_MESSAGE:
 		if (GPTP_CHECK_LEN(pkt, GPTP_FOLLOW_UP_LEN)) {
 			NET_WARN("Invalid length for %s packet "
-				 "should have %zd bytes but has %lu bytes",
+				 "should have %zd bytes but has %zd bytes",
 				 "FOLLOWUP",
 				 GPTP_FOLLOW_UP_LEN,
 				 GPTP_PACKET_LEN(pkt));
@@ -246,7 +250,7 @@ static void gptp_handle_msg(struct net_pkt *pkt)
 	case GPTP_PATH_DELAY_FOLLOWUP_MESSAGE:
 		if (GPTP_CHECK_LEN(pkt, GPTP_PDELAY_RESP_FUP_LEN)) {
 			NET_WARN("Invalid length for %s packet "
-				 "should have %zd bytes but has %lu bytes",
+				 "should have %zd bytes but has %zd bytes",
 				 "PDELAY_FOLLOWUP",
 				 GPTP_PDELAY_RESP_FUP_LEN,
 				 GPTP_PACKET_LEN(pkt));
@@ -273,7 +277,7 @@ static void gptp_handle_msg(struct net_pkt *pkt)
 	case GPTP_ANNOUNCE_MESSAGE:
 		if (GPTP_ANNOUNCE_CHECK_LEN(pkt)) {
 			NET_WARN("Invalid length for %s packet "
-				 "should have %zd bytes but has %lu bytes",
+				 "should have %zd bytes but has %zd bytes",
 				 "ANNOUNCE",
 				 GPTP_ANNOUNCE_LEN(pkt),
 				 GPTP_PACKET_LEN(pkt));
@@ -299,7 +303,7 @@ static void gptp_handle_msg(struct net_pkt *pkt)
 	case GPTP_SIGNALING_MESSAGE:
 		if (GPTP_CHECK_LEN(pkt, GPTP_SIGNALING_LEN)) {
 			NET_WARN("Invalid length for %s packet "
-				 "should have %zd bytes but has %lu bytes",
+				 "should have %zd bytes but has %zd bytes",
 				 "SIGNALING",
 				 GPTP_SIGNALING_LEN,
 				 GPTP_PACKET_LEN(pkt));
@@ -365,37 +369,42 @@ static void gptp_init_clock_ds(void)
 	prop_ds = GPTP_PROPERTIES_DS();
 
 	/* Initialize global data set. */
-	memset(global_ds, 0, sizeof(struct gptp_global_ds));
+	(void)memset(global_ds, 0, sizeof(struct gptp_global_ds));
 
 	/* Initialize default data set. */
 
 	/* Compute the clock identity from the first port MAC address. */
 	gptp_compute_clock_identity(GPTP_PORT_START);
 
-	/* XXX GrandMaster capability is not supported. */
-	default_ds->gm_capable = false;
-	default_ds->clk_quality.clock_class = GPTP_CLASS_SLAVE_ONLY;
+	default_ds->gm_capable = IS_ENABLED(CONFIG_NET_GPTP_GM_CAPABLE);
+	default_ds->clk_quality.clock_class = GPTP_CLASS_OTHER;
 	default_ds->clk_quality.clock_accuracy =
-		GPTP_CLOCK_ACCURACY_UNKNOWN;
+		CONFIG_NET_GPTP_CLOCK_ACCURACY;
 	default_ds->clk_quality.offset_scaled_log_var =
 		GPTP_OFFSET_SCALED_LOG_VAR_UNKNOWN;
-	default_ds->priority1 = GPTP_PRIORITY1_NON_GM_CAPABLE;
+
+	if (default_ds->gm_capable) {
+		default_ds->priority1 = GPTP_PRIORITY1_GM_CAPABLE;
+	} else {
+		default_ds->priority1 = GPTP_PRIORITY1_NON_GM_CAPABLE;
+	}
+
 	default_ds->priority2 = GPTP_PRIORITY2_DEFAULT;
 
-	default_ds->cur_utc_offset = 37; /* Current leap seconds TAI - UTC */
+	default_ds->cur_utc_offset = 37U; /* Current leap seconds TAI - UTC */
 	default_ds->flags.all = 0;
 	default_ds->flags.octets[1] = GPTP_FLAG_TIME_TRACEABLE;
 	default_ds->time_source = GPTP_TS_INTERNAL_OSCILLATOR;
 
 	/* Initialize current data set. */
-	memset(current_ds, 0, sizeof(struct gptp_current_ds));
+	(void)memset(current_ds, 0, sizeof(struct gptp_current_ds));
 
 	/* Initialize parent data set. */
 
 	/* parent clock id is initialized to default_ds clock id. */
-	memcpy(&parent_ds->port_id.clk_id, &default_ds->clk_id,
+	memcpy(parent_ds->port_id.clk_id, default_ds->clk_id,
 	       GPTP_CLOCK_ID_LEN);
-	memcpy(&parent_ds->gm_id, &default_ds->clk_id, GPTP_CLOCK_ID_LEN);
+	memcpy(parent_ds->gm_id, default_ds->clk_id, GPTP_CLOCK_ID_LEN);
 	parent_ds->port_id.port_number = 0;
 
 	/* TODO: Check correct value for below field. */
@@ -413,7 +422,7 @@ static void gptp_init_clock_ds(void)
 	/* Initialize properties data set. */
 
 	/* TODO: Get accurate values for below. From the GM. */
-	prop_ds->cur_utc_offset = 37; /* Current leap seconds TAI - UTC */
+	prop_ds->cur_utc_offset = 37U; /* Current leap seconds TAI - UTC */
 	prop_ds->cur_utc_offset_valid = false;
 	prop_ds->leap59 = false;
 	prop_ds->leap61 = false;
@@ -425,6 +434,8 @@ static void gptp_init_clock_ds(void)
 	global_ds->sys_flags.all = default_ds->flags.all;
 	global_ds->sys_current_utc_offset = default_ds->cur_utc_offset;
 	global_ds->sys_time_source = default_ds->time_source;
+	global_ds->clk_master_sync_itv =
+		NSEC_PER_SEC * GPTP_POW2(CONFIG_NET_GPTP_INIT_LOG_SYNC_ITV);
 }
 
 static void gptp_init_port_ds(int port)
@@ -461,7 +472,7 @@ static void gptp_init_port_ds(int port)
 	port_ds->ini_log_half_sync_itv = CONFIG_NET_GPTP_INIT_LOG_SYNC_ITV - 1;
 	port_ds->cur_log_half_sync_itv = port_ds->ini_log_half_sync_itv;
 	port_ds->sync_receipt_timeout = CONFIG_NET_GPTP_SYNC_RECEIPT_TIMEOUT;
-	port_ds->sync_receipt_timeout_time_itv = 10000000; /* 10ms */
+	port_ds->sync_receipt_timeout_time_itv = 10000000U; /* 10ms */
 
 	port_ds->ini_log_pdelay_req_itv =
 		CONFIG_NET_GPTP_INIT_LOG_PDELAY_REQ_ITV;
@@ -486,7 +497,7 @@ static void gptp_init_port_ds(int port)
 
 #if defined(CONFIG_NET_GPTP_STATISTICS)
 	/* Initialize stats data set. */
-	memset(port_param_ds, 0, sizeof(struct gptp_port_param_ds));
+	(void)memset(port_param_ds, 0, sizeof(struct gptp_port_param_ds));
 #endif
 }
 
@@ -534,7 +545,7 @@ static void gptp_thread(void)
 
 	for (port = GPTP_PORT_START; port < GPTP_PORT_END; port++) {
 		gptp_init_port_ds(port);
-		GPTP_GLOBAL_DS()->selected_role[port] = GPTP_PORT_DISABLED;
+		gptp_change_port_state(port, GPTP_PORT_DISABLED);
 	}
 
 	while (1) {
@@ -560,6 +571,19 @@ static void gptp_add_port(struct net_if *iface, void *user_data)
 	if (*num_ports >= CONFIG_NET_GPTP_NUM_PORTS) {
 		return;
 	}
+
+#if defined(CONFIG_NET_GPTP_VLAN)
+	if (CONFIG_NET_GPTP_VLAN_TAG >= 0 &&
+	    CONFIG_NET_GPTP_VLAN_TAG < NET_VLAN_TAG_UNSPEC) {
+		struct net_if *vlan_iface;
+
+		vlan_iface = net_eth_get_vlan_iface(iface,
+						    CONFIG_NET_GPTP_VLAN_TAG);
+		if (vlan_iface != iface) {
+			return;
+		}
+	}
+#endif /* CONFIG_NET_GPTP_VLAN */
 
 	/* Check if interface has a PTP clock. */
 	clk = net_eth_get_ptp_clock(iface);
@@ -610,7 +634,7 @@ void gptp_set_time_itv(struct gptp_uscaled_ns *interval,
 			}
 		}
 
-		if ((i + log_msg_interval) >= 96) {
+		if ((i + log_msg_interval) >= 96 || log_msg_interval > 64) {
 			/* Overflow, set maximum. */
 			interval->low = UINT64_MAX;
 			interval->high = UINT32_MAX;
@@ -647,7 +671,7 @@ s32_t gptp_uscaled_ns_to_timer_ms(struct gptp_uscaled_ns *usns)
 
 static s32_t timer_get_remaining_and_stop(struct k_timer *timer)
 {
-	int key;
+	unsigned int key;
 	s32_t timer_value;
 
 	key = irq_lock();
@@ -838,7 +862,7 @@ int gptp_get_port_data(struct gptp_domain *domain,
 		return -ENOENT;
 	}
 
-	if (port < 0 || port > CONFIG_NET_GPTP_NUM_PORTS) {
+	if (port < GPTP_PORT_START || port >= GPTP_PORT_END) {
 		return -EINVAL;
 	}
 
@@ -869,15 +893,142 @@ int gptp_get_port_data(struct gptp_domain *domain,
 	return 0;
 }
 
-void net_gptp_init(void)
+static void init_ports(void)
 {
-	gptp_domain.default_ds.nb_ports = 0;
 	net_if_foreach(gptp_add_port, &gptp_domain.default_ds.nb_ports);
 
 	/* Only initialize the state machine once the ports are known. */
 	gptp_init_state_machine();
 
-	k_thread_create(&gptp_thread_data, gptp_stack, sizeof(gptp_stack),
-			(k_thread_entry_t)gptp_thread,
-			NULL, NULL, NULL, K_PRIO_COOP(5), 0, 0);
+	tid = k_thread_create(&gptp_thread_data, gptp_stack,
+			      K_THREAD_STACK_SIZEOF(gptp_stack),
+			      (k_thread_entry_t)gptp_thread,
+			      NULL, NULL, NULL, K_PRIO_COOP(5), 0, 0);
+	k_thread_name_set(&gptp_thread_data, "gptp");
+}
+
+#if defined(CONFIG_NET_GPTP_VLAN)
+static struct net_mgmt_event_callback vlan_cb;
+
+struct vlan_work {
+	struct k_work work;
+	struct net_if *iface;
+} vlan;
+
+static void disable_port(int port)
+{
+	GPTP_GLOBAL_DS()->selected_role[port] = GPTP_PORT_DISABLED;
+
+	gptp_state_machine();
+}
+
+static void vlan_enabled(struct k_work *work)
+{
+	struct vlan_work *vlan = CONTAINER_OF(work,
+					      struct vlan_work,
+					      work);
+	if (tid) {
+		int port;
+
+		port = gptp_get_port_number(vlan->iface);
+		if (port < 0) {
+			NET_DBG("No port found for iface %p", vlan->iface);
+			return;
+		}
+
+		GPTP_GLOBAL_DS()->selected_role[port] = GPTP_PORT_SLAVE;
+
+		gptp_state_machine();
+	} else {
+		init_ports();
+	}
+}
+
+static void vlan_disabled(struct k_work *work)
+{
+	struct vlan_work *vlan = CONTAINER_OF(work,
+					      struct vlan_work,
+					      work);
+	int port;
+
+	port = gptp_get_port_number(vlan->iface);
+	if (port < 0) {
+		NET_DBG("No port found for iface %p", vlan->iface);
+		return;
+	}
+
+	disable_port(port);
+}
+
+static void vlan_event_handler(struct net_mgmt_event_callback *cb,
+			       u32_t mgmt_event,
+			       struct net_if *iface)
+{
+	u16_t tag;
+
+	if (mgmt_event != NET_EVENT_ETHERNET_VLAN_TAG_ENABLED &&
+	    mgmt_event != NET_EVENT_ETHERNET_VLAN_TAG_DISABLED) {
+		return;
+	}
+
+#if defined(CONFIG_NET_MGMT_EVENT_INFO)
+	if (!cb->info) {
+		return;
+	}
+
+	tag = *((u16_t *)cb->info);
+	if (tag != CONFIG_NET_GPTP_VLAN_TAG) {
+		return;
+	}
+
+	vlan.iface = iface;
+
+	if (mgmt_event == NET_EVENT_ETHERNET_VLAN_TAG_ENABLED) {
+		/* We found the right tag, now start gPTP for this interface */
+		k_work_init(&vlan.work, vlan_enabled);
+
+		NET_DBG("VLAN tag %d %s for iface %p", tag, "enabled", iface);
+	} else {
+		k_work_init(&vlan.work, vlan_disabled);
+
+		NET_DBG("VLAN tag %d %s for iface %p", tag, "disabled", iface);
+	}
+
+	k_work_submit(&vlan.work);
+#else
+	NET_WARN("VLAN event but tag info missing!");
+
+	ARG_UNUSED(tag);
+#endif
+}
+
+static void setup_vlan_events_listener(void)
+{
+	net_mgmt_init_event_callback(&vlan_cb, vlan_event_handler,
+				     NET_EVENT_ETHERNET_VLAN_TAG_ENABLED |
+				     NET_EVENT_ETHERNET_VLAN_TAG_DISABLED);
+	net_mgmt_add_event_callback(&vlan_cb);
+}
+#endif /* CONFIG_NET_GPTP_VLAN */
+
+void net_gptp_init(void)
+{
+	gptp_domain.default_ds.nb_ports = 0U;
+
+#if defined(CONFIG_NET_GPTP_VLAN)
+	/* If user has enabled gPTP over VLAN support, then we start gPTP
+	 * support after we have received correct "VLAN tag enabled" event.
+	 */
+	if (CONFIG_NET_GPTP_VLAN_TAG >= 0 &&
+	    CONFIG_NET_GPTP_VLAN_TAG < NET_VLAN_TAG_UNSPEC) {
+		setup_vlan_events_listener();
+	} else {
+		NET_WARN("VLAN tag %d set but the value is not valid.",
+			 CONFIG_NET_GPTP_VLAN_TAG);
+
+		init_ports();
+	}
+#else
+	init_ports();
+#endif
 }

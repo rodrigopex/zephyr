@@ -6,6 +6,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define NET_LOG_LEVEL CONFIG_NET_L2_ETHERNET_LOG_LEVEL
+
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_test, NET_LOG_LEVEL);
+
 #include <zephyr/types.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -20,6 +25,7 @@
 #include <net/net_ip.h>
 #include <net/net_pkt.h>
 #include <net/ethernet.h>
+#include <net/dummy.h>
 #include <net/net_l2.h>
 
 #include "ipv6.h"
@@ -27,7 +33,7 @@
 #define NET_LOG_ENABLED 1
 #include "net_private.h"
 
-#if defined(CONFIG_NET_DEBUG_L2_ETHERNET)
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 #define DBG(fmt, ...) printk(fmt, ##__VA_ARGS__)
 #else
 #define DBG(fmt, ...)
@@ -91,7 +97,7 @@ static void eth_iface_init(struct net_if *iface)
 	ethernet_init(iface);
 }
 
-static int eth_tx(struct net_if *iface, struct net_pkt *pkt)
+static int eth_tx(struct device *dev, struct net_pkt *pkt)
 {
 	if (!pkt->frags) {
 		DBG("No data to send!\n");
@@ -109,7 +115,6 @@ static int eth_tx(struct net_if *iface, struct net_pkt *pkt)
 		}
 	}
 
-	net_pkt_unref(pkt);
 	test_started = false;
 
 	return 0;
@@ -122,9 +127,9 @@ static enum ethernet_hw_caps eth_get_capabilities(struct device *dev)
 
 static struct ethernet_api api_funcs = {
 	.iface_api.init = eth_iface_init,
-	.iface_api.send = eth_tx,
 
 	.get_capabilities = eth_get_capabilities,
+	.send = eth_tx,
 };
 
 static void generate_mac(u8_t *mac_addr)
@@ -181,20 +186,20 @@ static void timestamp_setup(void)
 
 	iface = eth_interfaces[0];
 
-	net_if_register_timestamp_cb(&timestamp_cb, iface,
+	net_if_register_timestamp_cb(&timestamp_cb, NULL, iface,
 				     timestamp_callback);
 
 	timestamp_cb_called = false;
 	do_timestamp = false;
 
-	pkt = net_pkt_get_reserve_tx(0, K_FOREVER);
+	pkt = net_pkt_get_reserve_tx(K_FOREVER);
 	net_pkt_set_iface(pkt, iface);
 
 	/* Make sure that the callback function is called */
 	net_if_call_timestamp_cb(pkt);
 
 	zassert_true(timestamp_cb_called, "Timestamp callback not called\n");
-	zassert_equal(pkt->ref, 0, "Pkt %p not released\n");
+	zassert_equal(atomic_get(&pkt->atomic_ref), 0, "Pkt %p not released\n");
 }
 
 static void timestamp_callback_2(struct net_pkt *pkt)
@@ -228,33 +233,33 @@ static void timestamp_setup_2nd_iface(void)
 
 	iface = eth_interfaces[1];
 
-	net_if_register_timestamp_cb(&timestamp_cb_2, iface,
+	net_if_register_timestamp_cb(&timestamp_cb_2, NULL, iface,
 				     timestamp_callback_2);
 
 	timestamp_cb_called = false;
 	do_timestamp = false;
 
-	pkt = net_pkt_get_reserve_tx(0, K_FOREVER);
+	pkt = net_pkt_get_reserve_tx(K_FOREVER);
 	net_pkt_set_iface(pkt, iface);
 
 	/* Make sure that the callback function is called */
 	net_if_call_timestamp_cb(pkt);
 
 	zassert_true(timestamp_cb_called, "Timestamp callback not called\n");
-	zassert_equal(pkt->ref, 0, "Pkt %p not released\n");
+	zassert_equal(atomic_get(&pkt->atomic_ref), 0, "Pkt %p not released\n");
 }
 
 static void timestamp_setup_all(void)
 {
 	struct net_pkt *pkt;
 
-	net_if_register_timestamp_cb(&timestamp_cb_3, NULL,
+	net_if_register_timestamp_cb(&timestamp_cb_3, NULL, NULL,
 				     timestamp_callback);
 
 	timestamp_cb_called = false;
 	do_timestamp = false;
 
-	pkt = net_pkt_get_reserve_tx(0, K_FOREVER);
+	pkt = net_pkt_get_reserve_tx(K_FOREVER);
 	net_pkt_set_iface(pkt, eth_interfaces[0]);
 
 	/* The callback is called twice because we have two matching callbacks
@@ -267,7 +272,7 @@ static void timestamp_setup_all(void)
 	net_if_call_timestamp_cb(pkt);
 
 	zassert_true(timestamp_cb_called, "Timestamp callback not called\n");
-	zassert_equal(pkt->ref, 0, "Pkt %p not released\n");
+	zassert_equal(atomic_get(&pkt->atomic_ref), 0, "Pkt %p not released\n");
 
 	net_if_unregister_timestamp_cb(&timestamp_cb_3);
 }
@@ -284,7 +289,7 @@ static void timestamp_cleanup(void)
 	timestamp_cb_called = false;
 	do_timestamp = false;
 
-	pkt = net_pkt_get_reserve_tx(0, K_FOREVER);
+	pkt = net_pkt_get_reserve_tx(K_FOREVER);
 	net_pkt_set_iface(pkt, iface);
 
 	/* Make sure that the callback function is not called after unregister
@@ -292,7 +297,7 @@ static void timestamp_cleanup(void)
 	net_if_call_timestamp_cb(pkt);
 
 	zassert_false(timestamp_cb_called, "Timestamp callback called\n");
-	zassert_false(pkt->ref < 1, "Pkt %p released\n");
+	zassert_false(atomic_get(&pkt->atomic_ref) < 1, "Pkt %p released\n");
 
 	net_pkt_unref(pkt);
 }
@@ -302,7 +307,7 @@ struct user_data {
 	int total_if_count;
 };
 
-#if defined(CONFIG_NET_DEBUG_L2_ETHERNET)
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 static const char *iface2str(struct net_if *iface)
 {
 #ifdef CONFIG_NET_L2_ETHERNET
@@ -323,6 +328,11 @@ static void iface_cb(struct net_if *iface, void *user_data)
 	    net_if_get_by_iface(iface));
 
 	if (net_if_l2(iface) == &NET_L2_GET_NAME(ETHERNET)) {
+		if (ud->eth_if_count >= ARRAY_SIZE(eth_interfaces)) {
+			DBG("Invalid interface %p\n", iface);
+			return;
+		}
+
 		eth_interfaces[ud->eth_if_count++] = iface;
 	}
 
@@ -492,8 +502,9 @@ static void check_timestamp_before_enabling(void)
 	 * should have unreffed the packet by now so the ref count
 	 * should be zero now.
 	 */
-	zassert_equal(pkt->ref, 0, "packet %p was not released (ref %d)\n",
-		      pkt, pkt->ref);
+	zassert_equal(atomic_get(&pkt->atomic_ref), 0,
+		      "packet %p was not released (ref %d)\n",
+		      pkt, atomic_get(&pkt->atomic_ref));
 }
 
 static void check_timestamp_after_enabling(void)
@@ -514,8 +525,9 @@ static void check_timestamp_after_enabling(void)
 	 * and timestamp_cb() should have unreffed the packet by now so
 	 * the ref count should be zero at this point.
 	 */
-	zassert_equal(pkt->ref, 0, "packet %p was not released (ref %d)\n",
-		      pkt, pkt->ref);
+	zassert_equal(atomic_get(&pkt->atomic_ref), 0,
+		      "packet %p was not released (ref %d)\n",
+		      pkt, atomic_get(&pkt->atomic_ref));
 }
 
 void test_main(void)

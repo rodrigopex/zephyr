@@ -7,24 +7,31 @@
 /*
  * @brief test context and thread APIs
  *
+ * @defgroup kernel_context_tests Context Tests
+ *
+ * @ingroup all_tests
+ *
  * This module tests the following CPU and thread related routines:
  * k_thread_create(), k_yield(), k_is_in_isr(),
  * k_current_get(), k_cpu_idle(), k_cpu_atomic_idle(),
  * irq_lock(), irq_unlock(),
  * irq_offload(), irq_enable(), irq_disable(),
+ * @{
+ * @}
  */
 
 #include <ztest.h>
 #include <kernel_structs.h>
 #include <arch/cpu.h>
 #include <irq_offload.h>
+#include <sys_clock.h>
 
 /*
- * Include board.h from platform to get IRQ number.
+ * Include soc.h from platform to get IRQ number.
  * NOTE: Cortex-M does not need IRQ numbers
  */
-#if !defined(CONFIG_CPU_CORTEX_M)
-#include <board.h>
+#if !defined(CONFIG_CPU_CORTEX_M) && !defined(CONFIG_XTENSA)
+#include <soc.h>
 #endif
 
 #define THREAD_STACKSIZE    (512 + CONFIG_TEST_EXTRA_STACKSIZE)
@@ -50,14 +57,13 @@
 #define TICK_IRQ CONFIG_MVIC_TIMER_IRQ
 #endif
 #elif defined(CONFIG_XTENSA)
-#include <xtensa_timer.h>
-#define TICK_IRQ XT_TIMER_INTNUM
+#define TICK_IRQ UTIL_CAT(XCHAL_TIMER,		\
+			  UTIL_CAT(CONFIG_XTENSA_TIMER_ID, _INTERRUPT))
+
 #elif defined(CONFIG_ALTERA_AVALON_TIMER)
 #define TICK_IRQ TIMER_0_IRQ
 #elif defined(CONFIG_ARCV2_TIMER)
 #define TICK_IRQ IRQ_TIMER0
-#elif defined(CONFIG_PULPINO_TIMER)
-#define TICK_IRQ PULP_TIMER_A_CMP_IRQ
 #elif defined(CONFIG_RISCV_MACHINE_TIMER)
 #define TICK_IRQ RISCV_MACHINE_TIMER_IRQ
 #elif defined(CONFIG_CPU_CORTEX_M)
@@ -88,9 +94,6 @@
 #endif
 
 
-
-extern u32_t _tick_get_32(void);
-extern s64_t _tick_get(void);
 
 typedef struct {
 	int command;            /* command to process   */
@@ -221,7 +224,16 @@ void irq_enable_wrapper(int irq)
 	irq_enable(irq);
 }
 
-#ifdef HAS_POWERSAVE_INSTRUCTION
+#if defined(CONFIG_TICKLESS_KERNEL)
+static void test_kernel_cpu_idle(void)
+{
+	ztest_test_skip();
+}
+static void test_kernel_cpu_idle_atomic(void)
+{
+	ztest_test_skip();
+}
+#elif defined(HAS_POWERSAVE_INSTRUCTION)
 static void _test_kernel_cpu_idle(int atomic)
 {
 	int tms, tms2;;         /* current time in millisecond */
@@ -231,7 +243,7 @@ static void _test_kernel_cpu_idle(int atomic)
 	tms = k_uptime_get_32();
 	while (tms == k_uptime_get_32()) {
 #if defined(CONFIG_ARCH_POSIX)
-		posix_halt_cpu(); /*Sleep until next IRQ*/
+		k_busy_wait(50);
 #endif
 	}
 
@@ -245,7 +257,7 @@ static void _test_kernel_cpu_idle(int atomic)
 			k_cpu_idle();
 		}
 		/* calculating milliseconds per tick*/
-		tms += sys_clock_us_per_tick / USEC_PER_MSEC;
+		tms += __ticks_to_ms(1);
 		tms2 = k_uptime_get_32();
 		zassert_false(tms2 < tms, "Bad ms per tick value computed,"
 			      "got %d which is less than %d\n",
@@ -256,6 +268,8 @@ static void _test_kernel_cpu_idle(int atomic)
 /**
  *
  * @brief Test the k_cpu_idle() routine
+ *
+ * @ingroup kernel_context_tests
  *
  * This tests the k_cpu_idle() routine. The first thing it does is align to
  * a tick boundary. The only source of interrupts while the test is running is
@@ -302,15 +316,15 @@ static void _test_kernel_interrupts(disable_int_func disable_int,
 	int imask;
 
 	/* Align to a "tick boundary" */
-	tick = _tick_get_32();
-	while (_tick_get_32() == tick) {
+	tick = z_tick_get_32();
+	while (z_tick_get_32() == tick) {
 #if defined(CONFIG_ARCH_POSIX)
 		k_busy_wait(1000);
 #endif
 	}
 
 	tick++;
-	while (_tick_get_32() == tick) {
+	while (z_tick_get_32() == tick) {
 #if defined(CONFIG_ARCH_POSIX)
 		k_busy_wait(1000);
 #endif
@@ -327,15 +341,15 @@ static void _test_kernel_interrupts(disable_int_func disable_int,
 	count <<= 4;
 
 	imask = disable_int(irq);
-	tick = _tick_get_32();
+	tick = z_tick_get_32();
 	for (i = 0; i < count; i++) {
-		_tick_get_32();
+		z_tick_get_32();
 #if defined(CONFIG_ARCH_POSIX)
 		k_busy_wait(1000);
 #endif
 	}
 
-	tick2 = _tick_get_32();
+	tick2 = z_tick_get_32();
 
 	/*
 	 * Re-enable interrupts before returning (for both success and failure
@@ -343,18 +357,23 @@ static void _test_kernel_interrupts(disable_int_func disable_int,
 	 */
 	enable_int(imask);
 
-	zassert_equal(tick2, tick,
-		      "tick advanced with interrupts locked");
+	/* In TICKLESS, current time is retrieved from a hardware
+	 * counter and ticks DO advance with interrupts locked!
+	 */
+	if (!IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
+		zassert_equal(tick2, tick,
+			      "tick advanced with interrupts locked");
+	}
 
 	/* Now repeat with interrupts unlocked. */
 	for (i = 0; i < count; i++) {
-		_tick_get_32();
+		z_tick_get_32();
 #if defined(CONFIG_ARCH_POSIX)
 		k_busy_wait(1000);
 #endif
 	}
 
-	tick2 = _tick_get_32();
+	tick2 = z_tick_get_32();
 	zassert_not_equal(tick, tick2,
 			  "tick didn't advance as expected");
 }
@@ -363,6 +382,8 @@ static void _test_kernel_interrupts(disable_int_func disable_int,
  *
  * @brief Test routines for disabling and enabling interrupts
  *
+ * @ingroup kernel_context_tests
+ *
  * This routine tests the routines for disabling and enabling interrupts.
  * These include irq_lock() and irq_unlock(), irq_disable() and irq_enable().
  *
@@ -370,12 +391,19 @@ static void _test_kernel_interrupts(disable_int_func disable_int,
  */
 static void test_kernel_interrupts(void)
 {
+	/* IRQ locks don't prevent ticks from advancing in tickless mode */
+	if (IS_ENABLED(CONFIG_TICKLESS_KERNEL)) {
+		return;
+	}
+
 	_test_kernel_interrupts(irq_lock_wrapper, irq_unlock_wrapper, -1);
 }
 
 /**
  *
  * @brief Test routines for disabling and enabling interrupts (disable timer)
+ *
+ * @ingroup kernel_context_tests
  *
  * This routine tests the routines for disabling and enabling interrupts.
  * These include irq_lock() and irq_unlock(), irq_disable() and irq_enable().
@@ -395,6 +423,8 @@ static void test_kernel_timer_interrupts(void)
 /**
  *
  * @brief Test some context routines from a preemptible thread
+ *
+ * @ingroup kernel_context_tests
  *
  * This routines tests the k_current_get() and
  * k_is_in_isr() routines from both a preemptible thread  and an ISR (that
@@ -691,6 +721,8 @@ static void delayed_thread(void *num, void *arg2, void *arg3)
 /**
  * @brief Test timouts
  *
+ * @ingroup kernel_context_tests
+ *
  * @see k_busy_wait(), k_sleep()
  */
 static void test_busy_wait(void)
@@ -712,6 +744,8 @@ static void test_busy_wait(void)
 
 /**
  * @brief Test timouts
+ *
+ * @ingroup kernel_context_tests
  *
  * @see k_sleep()
  */
@@ -832,6 +866,8 @@ static void test_k_sleep(void)
  *
  * @brief Test the k_yield() routine
  *
+ * @ingroup kernel_context_tests
+ *
  * Tests the k_yield() routine. It starts another thread
  * (thus also testing k_thread_create()) and checks that behavior of
  * k_yield() against the a higher priority thread,
@@ -858,7 +894,13 @@ void test_k_yield(void)
 	k_sem_give(&sem_thread);
 }
 
-
+/**
+ * @brief Test kernel thread creation
+ *
+ * @ingroup kernel_context_tests
+ *
+ * @see k_thread_create
+ */
 void test_kernel_thread(void)
 {
 

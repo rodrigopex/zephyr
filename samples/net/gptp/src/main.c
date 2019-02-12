@@ -4,11 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if 1
-#define SYS_LOG_DOMAIN "gptp-app"
-#define NET_SYS_LOG_LEVEL SYS_LOG_LEVEL_DEBUG
-#define NET_LOG_ENABLED 1
-#endif
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_gptp_sample, LOG_LEVEL_DBG);
 
 #include <zephyr.h>
 #include <errno.h>
@@ -21,7 +18,7 @@
 
 static struct gptp_phase_dis_cb phase_dis;
 
-#if defined(CONFIG_NET_VLAN)
+#if defined(CONFIG_NET_GPTP_VLAN)
 /* User data for the interface callback */
 struct ud {
 	struct net_if *first;
@@ -63,32 +60,32 @@ static int setup_iface(struct net_if *iface, const char *ipv6_addr,
 
 	ret = net_eth_vlan_enable(iface, vlan_tag);
 	if (ret < 0) {
-		NET_ERR("Cannot enable VLAN for tag %d (%d)", vlan_tag, ret);
+		LOG_ERR("Cannot enable VLAN for tag %d (%d)", vlan_tag, ret);
 	}
 
 	if (net_addr_pton(AF_INET6, ipv6_addr, &addr6)) {
-		NET_ERR("Invalid address: %s", ipv6_addr);
+		LOG_ERR("Invalid address: %s", ipv6_addr);
 		return -EINVAL;
 	}
 
 	ifaddr = net_if_ipv6_addr_add(iface, &addr6, NET_ADDR_MANUAL, 0);
 	if (!ifaddr) {
-		NET_ERR("Cannot add %s to interface %p", ipv6_addr, iface);
+		LOG_ERR("Cannot add %s to interface %p", ipv6_addr, iface);
 		return -EINVAL;
 	}
 
 	if (net_addr_pton(AF_INET, ipv4_addr, &addr4)) {
-		NET_ERR("Invalid address: %s", ipv6_addr);
+		LOG_ERR("Invalid address: %s", ipv6_addr);
 		return -EINVAL;
 	}
 
 	ifaddr = net_if_ipv4_addr_add(iface, &addr4, NET_ADDR_MANUAL, 0);
 	if (!ifaddr) {
-		NET_ERR("Cannot add %s to interface %p", ipv4_addr, iface);
+		LOG_ERR("Cannot add %s to interface %p", ipv4_addr, iface);
 		return -EINVAL;
 	}
 
-	NET_DBG("Interface %p VLAN tag %d setup done.", iface, vlan_tag);
+	LOG_DBG("Interface %p VLAN tag %d setup done.", iface, vlan_tag);
 
 	return 0;
 }
@@ -98,7 +95,7 @@ static int init_vlan(void)
 	struct ud ud;
 	int ret;
 
-	memset(&ud, 0, sizeof(ud));
+	(void)memset(&ud, 0, sizeof(ud));
 
 	net_if_foreach(iface_cb, &ud);
 
@@ -124,7 +121,7 @@ static int init_vlan(void)
 
 	return 0;
 }
-#endif /* CONFIG_NET_VLAN */
+#endif /* CONFIG_NET_GPTP_VLAN */
 
 static void gptp_phase_dis_cb(u8_t *gm_identity,
 			      u16_t *time_base,
@@ -137,9 +134,9 @@ static void gptp_phase_dis_cb(u8_t *gm_identity,
 	if (memcmp(id, gm_identity, sizeof(id))) {
 		memcpy(id, gm_identity, sizeof(id));
 
-		NET_DBG("GM %s last phase %d.%lld",
-			gptp_sprint_clock_id(gm_identity, output,
-					     sizeof(output)),
+		LOG_DBG("GM %s last phase %d.%lld",
+			log_strdup(gptp_sprint_clock_id(gm_identity, output,
+							sizeof(output))),
 			last_gm_ph_change->high,
 			last_gm_ph_change->low);
 	}
@@ -147,9 +144,9 @@ static void gptp_phase_dis_cb(u8_t *gm_identity,
 
 static int init_app(void)
 {
-#if defined(CONFIG_NET_VLAN)
+#if defined(CONFIG_NET_GPTP_VLAN)
 	if (init_vlan() < 0) {
-		NET_ERR("Cannot setup VLAN");
+		LOG_ERR("Cannot setup VLAN");
 	}
 #endif
 

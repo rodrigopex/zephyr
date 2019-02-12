@@ -43,13 +43,19 @@ extern void net_if_init(void);
 extern void net_if_post_init(void);
 extern void net_if_carrier_down(struct net_if *iface);
 extern void net_context_init(void);
-enum net_verdict net_ipv4_process_pkt(struct net_pkt *pkt);
-enum net_verdict net_ipv6_process_pkt(struct net_pkt *pkt);
-extern void net_ipv6_init(void);
+enum net_verdict net_ipv4_input(struct net_pkt *pkt);
+enum net_verdict net_ipv6_input(struct net_pkt *pkt, bool is_loopback);
 extern void net_tc_tx_init(void);
 extern void net_tc_rx_init(void);
 extern void net_tc_submit_to_tx_queue(u8_t tc, struct net_pkt *pkt);
 extern void net_tc_submit_to_rx_queue(u8_t tc, struct net_pkt *pkt);
+extern enum net_verdict net_promisc_mode_input(struct net_pkt *pkt);
+
+char *net_sprint_addr(sa_family_t af, const void *addr);
+
+#define net_sprint_ipv4_addr(_addr) net_sprint_addr(AF_INET, _addr)
+
+#define net_sprint_ipv6_addr(_addr) net_sprint_addr(AF_INET6, _addr)
 
 #if defined(CONFIG_NET_GPTP)
 /**
@@ -75,7 +81,7 @@ int net_ipv6_send_fragmented_pkt(struct net_if *iface, struct net_pkt *pkt,
 				 u16_t pkt_len);
 #endif
 
-extern const char *net_proto2str(enum net_ip_protocol proto);
+extern const char *net_proto2str(int family, int proto);
 extern char *net_byte_to_hex(char *ptr, u8_t byte, char base, bool pad);
 extern char *net_sprint_ll_addr_buf(const u8_t *ll, u8_t ll_len,
 				    char *buf, int buflen);
@@ -136,11 +142,13 @@ struct net_tcp_hdr *net_tcp_header_fits(struct net_pkt *pkt,
 	return NULL;
 }
 
-void net_context_set_appdata_values(struct net_pkt *pkt,
-				    enum net_ip_protocol proto);
+void net_pkt_set_appdata_values(struct net_pkt *pkt,
+				enum net_ip_protocol proto);
 
 enum net_verdict net_context_packet_received(struct net_conn *conn,
 					     struct net_pkt *pkt,
+					     union net_ip_header *ip_hdr,
+					     union net_proto_header *proto_hdr,
 					     void *user_data);
 
 #if defined(CONFIG_NET_IPV4)
@@ -167,7 +175,6 @@ static inline u16_t net_calc_chksum_tcp(struct net_pkt *pkt)
 	return net_calc_chksum(pkt, IPPROTO_TCP);
 }
 
-#if NET_LOG_ENABLED > 0
 static inline char *net_sprint_ll_addr(const u8_t *ll, u8_t ll_len)
 {
 	static char buf[sizeof("xx:xx:xx:xx:xx:xx:xx:xx")];
@@ -175,147 +182,33 @@ static inline char *net_sprint_ll_addr(const u8_t *ll, u8_t ll_len)
 	return net_sprint_ll_addr_buf(ll, ll_len, (char *)buf, sizeof(buf));
 }
 
-static inline char *net_sprint_ipv6_addr(const struct in6_addr *addr)
-{
-#if defined(CONFIG_NET_IPV6)
-	static char buf[NET_IPV6_ADDR_LEN];
-
-	return net_addr_ntop(AF_INET6, addr, (char *)buf, sizeof(buf));
-#else
-	return NULL;
-#endif
-}
-
-static inline char *net_sprint_ipv4_addr(const struct in_addr *addr)
-{
-#if defined(CONFIG_NET_IPV4)
-	static char buf[NET_IPV4_ADDR_LEN];
-
-	return net_addr_ntop(AF_INET, addr, (char *)buf, sizeof(buf));
-#else
-	return NULL;
-#endif
-}
-
-static inline char *net_sprint_ip_addr(const struct net_addr *addr)
-{
-	switch (addr->family) {
-	case AF_INET6:
-#if defined(CONFIG_NET_IPV6)
-		return net_sprint_ipv6_addr(&addr->in6_addr);
-#else
-		break;
-#endif
-	case AF_INET:
-#if defined(CONFIG_NET_IPV4)
-		return net_sprint_ipv4_addr(&addr->in_addr);
-#else
-		break;
-#endif
-	default:
-		break;
-	}
-
-	return NULL;
-}
-
-static inline void _hexdump(const u8_t *packet, size_t length, u8_t reserve)
-{
-	char output[sizeof("xxxxyyyy xxxxyyyy")];
-	int n = 0, k = 0;
-	u8_t byte;
-#if defined(CONFIG_SYS_LOG) && (SYS_LOG_LEVEL > SYS_LOG_LEVEL_OFF)
-	u8_t r = reserve;
-#endif
-
-	while (length--) {
-		if (n % 16 == 0) {
-			printk(" %08X ", n);
-		}
-
-		byte = *packet++;
-
-#if defined(CONFIG_SYS_LOG) && (SYS_LOG_LEVEL > SYS_LOG_LEVEL_OFF)
-		if (reserve) {
-			if (r) {
-				printk(SYS_LOG_COLOR_YELLOW);
-				r--;
-			} else {
-				printk(SYS_LOG_COLOR_OFF);
-			}
-		}
-#endif
-
-		printk("%02X ", byte);
-
-		if (byte < 0x20 || byte > 0x7f) {
-			output[k++] = '.';
-		} else {
-			output[k++] = byte;
-		}
-
-		n++;
-		if (n % 8 == 0) {
-			if (n % 16 == 0) {
-				output[k] = '\0';
-				printk(" [%s]\n", output);
-				k = 0;
-			} else {
-				printk(" ");
-			}
-		}
-	}
-
-	if (n % 16) {
-		int i;
-
-		output[k] = '\0';
-
-		for (i = 0; i < (16 - (n % 16)); i++) {
-			printk("   ");
-		}
-
-		if ((n % 16) < 8) {
-			printk(" "); /* one extra delimiter after 8 chars */
-		}
-
-		printk(" [%s]\n", output);
-	}
-}
-
 static inline void net_hexdump(const char *str,
 			       const u8_t *packet, size_t length)
 {
 	if (!length) {
-		SYS_LOG_DBG("%s zero-length packet", str);
+		LOG_DBG("%s zero-length packet", str);
 		return;
 	}
 
-	printk("%s\n", str);
-
-	_hexdump(packet, length, 0);
+	LOG_HEXDUMP_DBG(packet, length, str);
 }
 
 
-/* Hexdump from all fragments
- * Set full as true to get also the L2 reserve part printed out
- */
+/* Hexdump from all fragments */
 static inline void net_hexdump_frags(const char *str,
 				     struct net_pkt *pkt, bool full)
 {
-	u8_t reserve = full ? net_pkt_ll_reserve(pkt) : 0;
 	struct net_buf *frag = pkt->frags;
 
-	printk("%s\n", str);
+	ARG_UNUSED(full);
+
+	if (str && str[0]) {
+		LOG_DBG("%s", str);
+	}
 
 	while (frag) {
-		_hexdump(full ? frag->data - reserve : frag->data,
-			 frag->len + reserve, reserve);
+		LOG_HEXDUMP_DBG(frag->data, frag->len, "");
 		frag = frag->frags;
-
-		if (full && reserve) {
-			reserve -= net_pkt_ll_reserve(pkt);
-		}
 	}
 }
 
@@ -328,7 +221,7 @@ static inline void net_print_frags(const char *str, struct net_pkt *pkt)
 		printk("%s", str);
 	}
 
-	printk("%p[%d]", pkt, pkt->ref);
+	printk("%p[%d]", pkt, atomic_get(&pkt->atomic_ref));
 
 	if (frag) {
 		printk("->");
@@ -345,41 +238,3 @@ static inline void net_print_frags(const char *str, struct net_pkt *pkt)
 
 	printk("\n");
 }
-
-#else /* NET_LOG_ENABLED */
-
-static inline char *net_sprint_ll_addr(const u8_t *ll, u8_t ll_len)
-{
-	ARG_UNUSED(ll);
-	ARG_UNUSED(ll_len);
-
-	return NULL;
-}
-
-static inline char *net_sprint_ipv6_addr(const struct in6_addr *addr)
-{
-	ARG_UNUSED(addr);
-
-	return NULL;
-}
-
-static inline char *net_sprint_ipv4_addr(const struct in_addr *addr)
-{
-	ARG_UNUSED(addr);
-
-	return NULL;
-}
-
-static inline char *net_sprint_ip_addr(const struct net_addr *addr)
-{
-	ARG_UNUSED(addr);
-
-	return NULL;
-}
-
-#define net_hexdump(...)
-#define net_hexdump_frags(...)
-
-#define net_print_frags(...)
-
-#endif /* NET_LOG_ENABLED */

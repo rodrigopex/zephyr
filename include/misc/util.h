@@ -11,12 +11,13 @@
  * Misc utilities usable by the kernel and application code.
  */
 
-#ifndef _UTIL__H_
-#define _UTIL__H_
+#ifndef ZEPHYR_INCLUDE_MISC_UTIL_H_
+#define ZEPHYR_INCLUDE_MISC_UTIL_H_
 
 #ifndef _ASMLANGUAGE
 
 #include <zephyr/types.h>
+#include <stdbool.h>
 
 /* Helper to pass a int as a pointer or vice-versa.
  * Those are available for 32 bits architectures:
@@ -25,6 +26,17 @@
 #define UINT_TO_POINTER(x) ((void *) (x))
 #define POINTER_TO_INT(x)  ((s32_t) (x))
 #define INT_TO_POINTER(x)  ((void *) (x))
+
+#if !(defined (__CHAR_BIT__) && defined (__SIZEOF_LONG__))
+#	error Missing required predefined macros for BITS_PER_LONG calculation
+#endif
+
+#define BITS_PER_LONG	(__CHAR_BIT__ * __SIZEOF_LONG__)
+/* Create a contiguous bitmask starting at bit position @l and ending at
+ * position @h.
+ */
+#define GENMASK(h, l) \
+	(((~0UL) - (1UL << (l)) + 1) & (~0UL >> (BITS_PER_LONG - 1 - (h))))
 
 /* Evaluates to 0 if cond is true-ish; compile error otherwise */
 #define ZERO_OR_COMPILE_ERROR(cond) ((int) sizeof(char[1 - 2 * !(cond)]) - 1)
@@ -117,8 +129,22 @@ static inline s64_t arithmetic_shift_right(s64_t value, u8_t shift)
 #define MHZ(x) (KHZ(x) * 1000)
 
 #ifndef BIT
+#if defined(_ASMLANGUAGE)
+#define BIT(n)  (1 << (n))
+#else
 #define BIT(n)  (1UL << (n))
 #endif
+#endif
+
+/**
+ * @brief Macro sets or clears bit depending on boolean value
+ *
+ * @param var Variable to be altered
+ * @param bit Bit number
+ * @param set Value 0 clears bit, any other value sets bit
+ */
+#define WRITE_BIT(var, bit, set) \
+	((var) = (set) ? ((var) | BIT(bit)) : ((var) & ~BIT(bit)))
 
 #define BIT_MASK(n) (BIT(n) - 1)
 
@@ -167,12 +193,97 @@ static inline s64_t arithmetic_shift_right(s64_t value, u8_t shift)
  *   ENABLED:   _IS_ENABLED3(_YYYY,    1,    0)
  *   DISABLED   _IS_ENABLED3(_XXXX 1,  0)
  */
-#define _IS_ENABLED2(one_or_two_args) _IS_ENABLED3(one_or_two_args 1, 0)
+#define _IS_ENABLED2(one_or_two_args) _IS_ENABLED3(one_or_two_args true, false)
 
 /* And our second argument is thus now cooked to be 1 in the case
  * where the value is defined to 1, and 0 if not:
  */
 #define _IS_ENABLED3(ignore_this, val, ...) val
+
+/**
+ * @brief Insert code depending on result of flag evaluation.
+ *
+ * This is based on same idea as @ref IS_ENABLED macro but as the result of
+ * flag evaluation provided code is injected. Because preprocessor interprets
+ * each comma as an argument boundary, code must be provided in the brackets.
+ * Brackets are stripped away during macro processing.
+ *
+ * Usage example:
+ *
+ * \#define MACRO(x) COND_CODE_1(CONFIG_FLAG, (u32_t x;), ())
+ *
+ * It can be considered as alternative to:
+ *
+ * \#if defined(CONFIG_FLAG) && (CONFIG_FLAG == 1)
+ * \#define MACRO(x) u32_t x;
+ * \#else
+ * \#define MACRO(x)
+ * \#endif
+ *
+ * However, the advantage of that approach is that code is resolved in place
+ * where it is used while \#if method resolves given macro when header is
+ * included and product is fixed in the given scope.
+ *
+ * @note Flag can also be a result of preprocessor output e.g.
+ *	 product of NUM_VA_ARGS_LESS_1(...).
+ *
+ * @param _flag		Evaluated flag
+ * @param _if_1_code	Code used if flag exists and equal 1. Argument must be
+ *			in brackets.
+ * @param _else_code	Code used if flag doesn't exists or isn't equal 1.
+ *
+ */
+#define COND_CODE_1(_flag, _if_1_code, _else_code) \
+	_COND_CODE_1(_flag, _if_1_code, _else_code)
+
+#define _COND_CODE_1(_flag, _if_1_code, _else_code) \
+	__COND_CODE(_XXXX##_flag, _if_1_code, _else_code)
+
+/**
+ * @brief Insert code depending on result of flag evaluation.
+ *
+ * See @ref COND_CODE_1 for details.
+ *
+ * @param _flag		Evaluated flag
+ * @param _if_0_code	Code used if flag exists and equal 0. Argument must be
+ *			in brackets.
+ * @param _else_code	Code used if flag doesn't exists or isn't equal 0.
+ *
+ */
+#define COND_CODE_0(_flag, _if_0_code, _else_code) \
+	_COND_CODE_0(_flag, _if_0_code, _else_code)
+
+#define _COND_CODE_0(_flag, _if_0_code, _else_code) \
+	__COND_CODE(_ZZZZ##_flag, _if_0_code, _else_code)
+
+#define _ZZZZ0 _YYYY,
+
+/* Macro used internally by @ref COND_CODE_1 and @ref COND_CODE_0. */
+#define __COND_CODE(one_or_two_args, _if_code, _else_code) \
+	__GET_ARG2_DEBRACKET(one_or_two_args _if_code, _else_code)
+
+/* Macro used internally to remove brackets from argument. */
+#define __DEBRACKET(...) __VA_ARGS__
+
+/* Macro used internally for getting second argument and removing brackets
+ * around that argument. It is expected that parameter is provided in brackets
+ */
+#define __GET_ARG2_DEBRACKET(ignore_this, val, ...) __DEBRACKET val
+
+/**
+ * @brief Get first argument from variable list of arguments
+ */
+#define GET_ARG1(arg1, ...) arg1
+
+/**
+ * @brief Get second argument from variable list of arguments
+ */
+#define GET_ARG2(arg1, arg2, ...) arg2
+
+/**
+ * @brief Get all arguments except the first one.
+ */
+#define GET_ARGS_LESS_1(val, ...) __VA_ARGS__
 
 /**
  * Macros for doing code-generation with the preprocessor.
@@ -317,7 +428,7 @@ static inline s64_t arithmetic_shift_right(s64_t value, u8_t shift)
  *
  *    \#define FOO(i, _) NRF_PWM ## i ,
  *    { UTIL_LISTIFY(PWM_COUNT, FOO) }
- *    // The above two lines will generate the below:
+ *    The above two lines will generate the below:
  *    { NRF_PWM0 , NRF_PWM1 , }
  *
  * @note Calling UTIL_LISTIFY with undefined arguments has undefined
@@ -400,5 +511,69 @@ static inline s64_t arithmetic_shift_right(s64_t value, u8_t shift)
 #define MACRO_MAP_13(macro, a, ...) macro(a)MACRO_MAP_12(macro, __VA_ARGS__,)
 #define MACRO_MAP_14(macro, a, ...) macro(a)MACRO_MAP_13(macro, __VA_ARGS__,)
 #define MACRO_MAP_15(macro, a, ...) macro(a)MACRO_MAP_14(macro, __VA_ARGS__,)
+/*
+ * The following provides variadic preprocessor macro support to
+ * help eliminate multiple, repetitive function/macro calls.  This
+ * allows up to 10 "arguments" in addition to _call .
+ * Note - derived from work on:
+ * https://codecraft.co/2014/11/25/variadic-macros-tricks/
+ */
 
-#endif /* _UTIL__H_ */
+#define _GET_ARG(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, N, ...) N
+
+#define _for_0(_call, ...)
+#define _for_1(_call, x) _call(x)
+#define _for_2(_call, x, ...) _call(x) _for_1(_call, ##__VA_ARGS__)
+#define _for_3(_call, x, ...) _call(x) _for_2(_call, ##__VA_ARGS__)
+#define _for_4(_call, x, ...) _call(x) _for_3(_call, ##__VA_ARGS__)
+#define _for_5(_call, x, ...) _call(x) _for_4(_call, ##__VA_ARGS__)
+#define _for_6(_call, x, ...) _call(x) _for_5(_call, ##__VA_ARGS__)
+#define _for_7(_call, x, ...) _call(x) _for_6(_call, ##__VA_ARGS__)
+#define _for_8(_call, x, ...) _call(x) _for_7(_call, ##__VA_ARGS__)
+#define _for_9(_call, x, ...) _call(x) _for_8(_call, ##__VA_ARGS__)
+#define _for_10(_call, x, ...) _call(x) _for_9(_call, ##__VA_ARGS__)
+
+#define FOR_EACH(x, ...) \
+	_GET_ARG(__VA_ARGS__, \
+	_for_10, _for_9, _for_8, _for_7, _for_6, _for_5, \
+	_for_4, _for_3, _for_2, _for_1, _for_0)(x, ##__VA_ARGS__)
+
+/* FOR_EACH_FIXED_ARG is used for calling the same function
+ * With one fixed argument and changing 2nd argument.
+ */
+
+#define z_rep_0(_fn, f, ...)
+#define z_rep_1(_fn, f, x) {_fn(x, f); z_rep_0(_fn, f)}
+#define z_rep_2(_fn, f, x, ...) {_fn(x, f); z_rep_1(_fn, f, ##__VA_ARGS__)}
+#define z_rep_3(_fn, f, x, ...) {_fn(x, f); z_rep_2(_fn, f, ##__VA_ARGS__)}
+#define z_rep_4(_fn, f, x, ...) {_fn(x, f); z_rep_3(_fn, f, ##__VA_ARGS__)}
+#define z_rep_5(_fn, f, x, ...) {_fn(x, f); z_rep_4(_fn, f, ##__VA_ARGS__)}
+#define z_rep_6(_fn, f, x, ...) {_fn(x, f); z_rep_5(_fn, f, ##__VA_ARGS__)}
+#define z_rep_7(_fn, f, x, ...) {_fn(x, f); z_rep_6(_fn, f, ##__VA_ARGS__)}
+#define z_rep_8(_fn, f, x, ...) {_fn(x, f); z_rep_7(_fn, f, ##__VA_ARGS__)}
+#define z_rep_9(_fn, f, x, ...) {_fn(x, f); z_rep_8(_fn, f, ##__VA_ARGS__)}
+#define z_rep_10(_fn, f, x, ...) {_fn(x, f); z_rep_9(_fn, f, ##__VA_ARGS__)}
+#define z_rep_11(_fn, f, x, ...) {_fn(x, f); z_rep_10(_fn, f, ##__VA_ARGS__)}
+#define z_rep_12(_fn, f, x, ...) {_fn(x, f); z_rep_11(_fn, f, ##__VA_ARGS__)}
+#define z_rep_13(_fn, f, x, ...) {_fn(x, f); z_rep_12(_fn, f, ##__VA_ARGS__)}
+#define z_rep_14(_fn, f, x, ...) {_fn(x, f); z_rep_13(_fn, f, ##__VA_ARGS__)}
+#define z_rep_15(_fn, f, x, ...) {_fn(x, f); z_rep_14(_fn, f, ##__VA_ARGS__)}
+#define z_rep_16(_fn, f, x, ...) {_fn(x, f); z_rep_15(_fn, f, ##__VA_ARGS__)}
+#define z_rep_17(_fn, f, x, ...) {_fn(x, f); z_rep_16(_fn, f, ##__VA_ARGS__)}
+#define z_rep_18(_fn, f, x, ...) {_fn(x, f); z_rep_17(_fn, f, ##__VA_ARGS__)}
+#define z_rep_19(_fn, f, x, ...) {_fn(x, f); z_rep_18(_fn, f, ##__VA_ARGS__)}
+#define z_rep_20(_fn, f, x, ...) {_fn(x, f); z_rep_19(_fn, f, ##__VA_ARGS__)}
+
+
+#define Z_GET_ARG_2(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, \
+		   _14, _15, _16, _17, _18, _19, _20, N, ...) N
+
+#define FOR_EACH_FIXED_ARG(fixed_arg, x, ...) \
+	{Z_GET_ARG_2(__VA_ARGS__,				\
+		     z_rep_20, z_rep_19, z_rep_18, z_rep_17, z_rep_16,	\
+		     z_rep_15, z_rep_14, z_rep_13, z_rep_12, z_rep_11,	\
+		     z_rep_10, z_rep_9, z_rep_8, z_rep_7, z_rep_6,	\
+		     z_rep_5, z_rep_4, z_rep_3, z_rep_2, z_rep_1, z_rep_0) \
+	 (fixed_arg, x, ##__VA_ARGS__)}
+
+#endif /* ZEPHYR_INCLUDE_MISC_UTIL_H_ */

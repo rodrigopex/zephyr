@@ -4,14 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include <zephyr.h>
-
-#define LOG_MODULE_NAME foo
 #include <logging/log.h>
-LOG_MODULE_REGISTER();
+#include "sample_module.h"
+
+LOG_MODULE_REGISTER(MODULE_NAME, CONFIG_SAMPLE_MODULE_LOG_LEVEL);
 
 const char *sample_module_name_get(void)
 {
-	return STRINGIFY(LOG_MODULE_NAME);
+	return STRINGIFY(MODULE_NAME);
 }
 
 void sample_module_func(void)

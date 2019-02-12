@@ -10,8 +10,8 @@
  *
  */
 
-#ifndef __GPTP_H
-#define __GPTP_H
+#ifndef ZEPHYR_INCLUDE_NET_GPTP_H_
+#define ZEPHYR_INCLUDE_NET_GPTP_H_
 
 /**
  * @brief generic Precision Time Protocol (gPTP) support
@@ -22,16 +22,16 @@
 
 #include <net/net_core.h>
 #include <net/ptp_time.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define GPTP_CLOCK_ACCURACY_UNKNOWN        0xFE
-
 #define GPTP_OFFSET_SCALED_LOG_VAR_UNKNOWN 0x436A
 
 #define GPTP_PRIORITY1_NON_GM_CAPABLE      255
+#define GPTP_PRIORITY1_GM_CAPABLE          248
 #define GPTP_PRIORITY2_DEFAULT             248
 
 /**
@@ -81,6 +81,13 @@ static inline double _gptp_pow2(int exp)
 
 #define GPTP_POW2(exp) _gptp_pow2(exp)
 #endif
+
+/* Pre-calculated constants */
+/* 2^16 */
+#define GPTP_POW2_16	65536.0
+/* 2^41 */
+#define GPTP_POW2_41	2199023255552.0
+
 
 /* Message types. Event messages have BIT(3) set to 0, and general messages
  * have that bit set to 1. IEEE 802.1AS chapter 10.5.2.2.2
@@ -165,19 +172,12 @@ struct gptp_hdr {
 	s8_t log_msg_interval;
 } __packed;
 
-/*
- * TODO: k_uptime_get need to be replaced by the MAC ptp_clock.
- * The ptp_clock access infrastructure is not ready yet
- * so use it for the time being.
- * k_uptime time precision is in ms.
- */
-#define GPTP_GET_CURRENT_TIME_NANOSECOND() (k_uptime_get() * 1000000)
-#define GPTP_GET_CURRENT_TIME_USCALED_NS(uscaled_ns_ptr)		\
+#define GPTP_GET_CURRENT_TIME_USCALED_NS(port, uscaled_ns_ptr)		\
 	do {								\
 		(uscaled_ns_ptr)->low =					\
-			GPTP_GET_CURRENT_TIME_NANOSECOND() << 16;	\
+			gptp_get_current_time_nanosecond(port) << 16;	\
 		(uscaled_ns_ptr)->high = 0;				\
-	} while (0)
+	} while (false)
 
 /**
  * @typedef gptp_phase_dis_callback_t
@@ -212,6 +212,25 @@ struct gptp_phase_dis_cb {
 
 	/** Phase discontinuity callback. */
 	gptp_phase_dis_callback_t cb;
+};
+
+/**
+ * @brief ClockSourceTime.invoke function parameters
+ *
+ * Parameters passed by ClockSourceTime.invoke function.
+ */
+struct gptp_clk_src_time_invoke_params {
+	/** Frequency change on the last Time Base Indicator Change. */
+	double last_gm_freq_change;
+
+	/** The time this function is invoked. */
+	struct net_ptp_extended_time src_time;
+
+	/** Phase change on the last Time Base Indicator Change. */
+	struct gptp_scaled_ns last_gm_phase_change;
+
+	/** Time Base - changed only if Phase or Frequency changes. */
+	u16_t time_base_indicator;
 };
 
 /**
@@ -285,6 +304,23 @@ void gptp_foreach_port(gptp_port_cb_t cb, void *user_data);
  */
 struct gptp_domain *gptp_get_domain(void);
 
+/**
+ * @brief This interface is used by the ClockSource entity to provide time to
+ *        the ClockMaster entity of a time-aware system.
+ *
+ * @param arg Current state and parameters of the ClockSource entity.
+ */
+void gptp_clk_src_time_invoke(struct gptp_clk_src_time_invoke_params *arg);
+
+/**
+ * @brief Return pointer to gPTP packet header in network packet.
+ *
+ * @param pkt Network packet (received or sent)
+ *
+ * @return Pointer to gPTP header.
+ */
+struct gptp_hdr *gptp_get_hdr(struct net_pkt *pkt);
+
 #ifdef __cplusplus
 }
 #endif
@@ -293,4 +329,4 @@ struct gptp_domain *gptp_get_domain(void);
  * @}
  */
 
-#endif /* __GPTP_H */
+#endif /* ZEPHYR_INCLUDE_NET_GPTP_H_ */

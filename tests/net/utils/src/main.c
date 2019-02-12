@@ -6,6 +6,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_test, CONFIG_NET_UTILS_LOG_LEVEL);
+
 #include <zephyr/types.h>
 #include <stddef.h>
 #include <string.h>
@@ -107,9 +110,6 @@ static const unsigned char pkt3[199] = {
 
 /* IPv6 TCP (224 bytes) */
 static const unsigned char v6_tcp_pkt1[224] = {
-/* Ethernet header starts here */
-0x00, 0xe0, 0x4c, 0x36, 0x03, 0xa1, 0x00, 0x25, /* ..L6...% */
-0x11, 0x4a, 0x86, 0xb3, 0x86, 0xdd,
 /* IPv6 header starts here */
 0x60, 0x00, /* .J....`. */
 0x00, 0x00, 0x00, 0xaa, 0x06, 0x80, 0xfe, 0x80, /* ........ */
@@ -144,9 +144,6 @@ static const unsigned char v6_tcp_pkt1[224] = {
 
 /* IPv6 UDP (179 bytes) */
 static const unsigned char v6_udp_pkt1[179] = {
-/* Ethernet header starts here */
-0x33, 0x33, 0x00, 0x00, 0x00, 0xfb, 0x7c, 0x01, /* 33....|. */
-0x91, 0x69, 0xb5, 0xbb, 0x86, 0xdd,
 /* IPv6 header starts here */
 0x60, 0x09, /* .i....`. */
 0xe5, 0x0e, 0x00, 0x7d, 0x11, 0xff, 0xfe, 0x80, /* ...}.... */
@@ -179,9 +176,6 @@ static const unsigned char v6_udp_pkt1[179] = {
 #if defined(CONFIG_NET_IPV4)
 /* ICMP reply (98 bytes) */
 static const unsigned char pkt4[98] = {
-/* Ethernet header starts here */
-0x1a, 0xc9, 0xb7, 0xb6, 0x46, 0x70, 0x10, 0x00, /* ....Fp.. */
-0x00, 0x00, 0x00, 0x68, 0x08, 0x00,
 /* IPv4 header starts here */
 0x45, 0x00, /* ...h..E. */
 0x00, 0x54, 0x33, 0x35, 0x40, 0x00, 0x40, 0x01, /* .T35@.@. */
@@ -201,9 +195,6 @@ static const unsigned char pkt4[98] = {
 
 /* ICMP request (98 bytes) */
 static const unsigned char pkt5[98] = {
-/* Ethernet header starts here */
-0x10, 0x00, 0x00, 0x00, 0x00, 0x68, 0x1a, 0xc9, /* .....h.. */
-0xb7, 0xb6, 0x46, 0x70, 0x08, 0x00,
 /* IPv4 header starts here */
 0x45, 0x00, /* ..Fp..E. */
 0x00, 0x54, 0x33, 0x35, 0x40, 0x00, 0x40, 0x01, /* .T35@.@. */
@@ -223,11 +214,8 @@ static const unsigned char pkt5[98] = {
 
 /* IPv4 TCP (90 bytes) */
 static const unsigned char v4_tcp_pkt1[90] = {
-/* Ethernet header starts here */
-0x00, 0x25, 0x11, 0x4a, 0x86, 0xb3, 0x00, 0xe0, /* .%.J.... */
-0x4c, 0x36, 0x03, 0xa1, 0x08, 0x00,
-0x45, 0x10, /* L6....E. */
 /* IPv4 header starts here */
+0x45, 0x10, /* L6....E. */
 0x00, 0x4c, 0x99, 0x3c, 0x40, 0x00, 0x40, 0x06, /* .L.<@.@. */
 0x1c, 0x5a, 0xc0, 0xa8, 0x01, 0xdb, 0xc0, 0xa8, /* .Z...... */
 0x01, 0xda,
@@ -244,9 +232,6 @@ static const unsigned char v4_tcp_pkt1[90] = {
 
 /* IPv4 UDP (192 bytes) */
 static const unsigned char v4_udp_pkt1[192] = {
-/* Ethernet header starts here */
-0x00, 0xe0, 0x4c, 0x36, 0x03, 0xa1, 0x00, 0x25, /* ..L6...% */
-0x11, 0x4a, 0x86, 0xb3, 0x08, 0x00,
 /* IPv4 header starts here */
 0x45, 0x00, /* .J....E. */
 0x00, 0xb2, 0x06, 0x85, 0x00, 0x00, 0x80, 0x11, /* ........ */
@@ -290,8 +275,12 @@ void test_utils(void)
 	int i, chunk, datalen, total = 0;
 
 	/* Packet fits to one fragment */
-	pkt = net_pkt_get_reserve_rx(0, K_FOREVER);
-	frag = net_pkt_get_reserve_rx_data(10, K_FOREVER);
+	pkt = net_pkt_get_reserve_rx(K_SECONDS(1));
+	zassert_not_null(pkt, "Out of mem");
+
+	frag = net_pkt_get_reserve_rx_data(K_SECONDS(1));
+	zassert_not_null(frag, "Out of mem");
+
 	net_pkt_frag_add(pkt, frag);
 
 	memcpy(net_buf_add(frag, sizeof(pkt1)), pkt1, sizeof(pkt1));
@@ -311,7 +300,7 @@ void test_utils(void)
 	frag->data[hdr_len + 2] = 0;
 	frag->data[hdr_len + 3] = 0;
 
-	chksum = ntohs(~net_calc_chksum(pkt, IPPROTO_ICMPV6));
+	chksum = ntohs(net_calc_chksum(pkt, IPPROTO_ICMPV6));
 	if (chksum != orig_chksum) {
 		printk("Invalid chksum 0x%x in pkt1, should be 0x%x\n",
 		       chksum, orig_chksum);
@@ -320,8 +309,12 @@ void test_utils(void)
 	net_pkt_unref(pkt);
 
 	/* Then a case where there will be two fragments */
-	pkt = net_pkt_get_reserve_rx(0, K_FOREVER);
-	frag = net_pkt_get_reserve_rx_data(10, K_FOREVER);
+	pkt = net_pkt_get_reserve_rx(K_SECONDS(1));
+	zassert_not_null(pkt, "Out of mem");
+
+	frag = net_pkt_get_reserve_rx_data(K_SECONDS(1));
+	zassert_not_null(frag, "Out of mem");
+
 	net_pkt_frag_add(pkt, frag);
 	memcpy(net_buf_add(frag, sizeof(pkt2) / 2), pkt2, sizeof(pkt2) / 2);
 
@@ -334,12 +327,14 @@ void test_utils(void)
 	frag->data[hdr_len + 2] = 0;
 	frag->data[hdr_len + 3] = 0;
 
-	frag = net_pkt_get_reserve_rx_data(10, K_FOREVER);
+	frag = net_pkt_get_reserve_rx_data(K_SECONDS(1));
+	zassert_not_null(frag, "Out of mem");
+
 	net_pkt_frag_add(pkt, frag);
 	memcpy(net_buf_add(frag, sizeof(pkt2) - sizeof(pkt2) / 2),
 	       pkt2 + sizeof(pkt2) / 2, sizeof(pkt2) - sizeof(pkt2) / 2);
 
-	chksum = ntohs(~net_calc_chksum(pkt, IPPROTO_ICMPV6));
+	chksum = ntohs(net_calc_chksum(pkt, IPPROTO_ICMPV6));
 	if (chksum != orig_chksum) {
 		printk("Invalid chksum 0x%x in pkt2, should be 0x%x\n",
 		       chksum, orig_chksum);
@@ -348,8 +343,12 @@ void test_utils(void)
 	net_pkt_unref(pkt);
 
 	/* Then a case where there will be two fragments but odd data size */
-	pkt = net_pkt_get_reserve_rx(0, K_FOREVER);
-	frag = net_pkt_get_reserve_rx_data(10, K_FOREVER);
+	pkt = net_pkt_get_reserve_rx(K_SECONDS(1));
+	zassert_not_null(pkt, "Out of mem");
+
+	frag = net_pkt_get_reserve_rx_data(K_SECONDS(1));
+	zassert_not_null(frag, "Out of mem");
+
 	net_pkt_frag_add(pkt, frag);
 	memcpy(net_buf_add(frag, sizeof(pkt3) / 2), pkt3, sizeof(pkt3) / 2);
 	printk("First fragment will have %zd bytes\n", sizeof(pkt3) / 2);
@@ -363,14 +362,16 @@ void test_utils(void)
 	frag->data[hdr_len + 2] = 0;
 	frag->data[hdr_len + 3] = 0;
 
-	frag = net_pkt_get_reserve_rx_data(10, K_FOREVER);
+	frag = net_pkt_get_reserve_rx_data(K_SECONDS(1));
+	zassert_not_null(frag, "Out of mem");
+
 	net_pkt_frag_add(pkt, frag);
 	memcpy(net_buf_add(frag, sizeof(pkt3) - sizeof(pkt3) / 2),
 	       pkt3 + sizeof(pkt3) / 2, sizeof(pkt3) - sizeof(pkt3) / 2);
 	printk("Second fragment will have %zd bytes\n",
 	       sizeof(pkt3) - sizeof(pkt3) / 2);
 
-	chksum = ntohs(~net_calc_chksum(pkt, IPPROTO_ICMPV6));
+	chksum = ntohs(net_calc_chksum(pkt, IPPROTO_ICMPV6));
 	if (chksum != orig_chksum) {
 		printk("Invalid chksum 0x%x in pkt3, should be 0x%x\n",
 		       chksum, orig_chksum);
@@ -379,8 +380,12 @@ void test_utils(void)
 	net_pkt_unref(pkt);
 
 	/* Then a case where there will be several fragments */
-	pkt = net_pkt_get_reserve_rx(0, K_FOREVER);
-	frag = net_pkt_get_reserve_rx_data(10, K_FOREVER);
+	pkt = net_pkt_get_reserve_rx(K_SECONDS(1));
+	zassert_not_null(frag, "Out of mem");
+
+	frag = net_pkt_get_reserve_rx_data(K_SECONDS(1));
+	zassert_not_null(frag, "Out of mem");
+
 	net_pkt_frag_add(pkt, frag);
 	memcpy(net_buf_add(frag, sizeof(struct net_ipv6_hdr)), pkt3,
 	       sizeof(struct net_ipv6_hdr));
@@ -395,7 +400,9 @@ void test_utils(void)
 
 	for (i = 0; i < datalen/chunk; i++) {
 		/* Next fragments will contain the data in odd sizes */
-		frag = net_pkt_get_reserve_rx_data(10, K_FOREVER);
+		frag = net_pkt_get_reserve_rx_data(K_SECONDS(1));
+		zassert_not_null(frag, "Out of mem");
+
 		net_pkt_frag_add(pkt, frag);
 		memcpy(net_buf_add(frag, chunk),
 		       pkt3 + sizeof(struct net_ipv6_hdr) + i * chunk, chunk);
@@ -414,7 +421,9 @@ void test_utils(void)
 		}
 	}
 	if ((datalen - total) > 0) {
-		frag = net_pkt_get_reserve_rx_data(10, K_FOREVER);
+		frag = net_pkt_get_reserve_rx_data(K_SECONDS(1));
+		zassert_not_null(frag, "Out of mem");
+
 		net_pkt_frag_add(pkt, frag);
 		memcpy(net_buf_add(frag, datalen - total),
 		       pkt3 + sizeof(struct net_ipv6_hdr) + i * chunk,
@@ -434,7 +443,7 @@ void test_utils(void)
 		zassert_true(0, "exiting");
 	}
 
-	chksum = ntohs(~net_calc_chksum(pkt, IPPROTO_ICMPV6));
+	chksum = ntohs(net_calc_chksum(pkt, IPPROTO_ICMPV6));
 	if (chksum != orig_chksum) {
 		printk("Invalid chksum 0x%x in pkt3, should be 0x%x\n",
 		       chksum, orig_chksum);
@@ -444,17 +453,18 @@ void test_utils(void)
 #endif /* CONFIG_NET_IPV6 */
 
 	/* Another packet that fits to one fragment.
-	 * This one has ethernet header before IPv4 data.
 	 */
 #if defined(CONFIG_NET_IPV4)
-	pkt = net_pkt_get_reserve_rx(0, K_FOREVER);
-	frag = net_pkt_get_reserve_rx_data(sizeof(struct net_eth_hdr),
-					    K_FOREVER);
+	pkt = net_pkt_get_reserve_rx(K_SECONDS(1));
+	zassert_not_null(pkt, "Out of mem");
+
+	frag = net_pkt_get_reserve_rx_data(K_SECONDS(1));
+	zassert_not_null(frag, "Out of mem");
+
 	net_pkt_frag_add(pkt, frag);
 
-	net_pkt_set_ll_reserve(pkt, sizeof(struct net_eth_hdr));
-	memcpy(net_pkt_ll(pkt), pkt4, sizeof(pkt4));
-	net_buf_add(frag, sizeof(pkt4) - sizeof(struct net_eth_hdr));
+	memcpy(net_pkt_data(pkt), pkt4, sizeof(pkt4));
+	net_buf_add(frag, sizeof(pkt4));
 
 	net_pkt_set_ip_hdr_len(pkt, sizeof(struct net_ipv4_hdr));
 	net_pkt_set_family(pkt, AF_INET);
@@ -465,7 +475,7 @@ void test_utils(void)
 	frag->data[hdr_len + 2] = 0;
 	frag->data[hdr_len + 3] = 0;
 
-	chksum = ntohs(~net_calc_chksum(pkt, IPPROTO_ICMP));
+	chksum = ntohs(net_calc_chksum(pkt, IPPROTO_ICMP));
 	if (chksum != orig_chksum) {
 		printk("Invalid chksum 0x%x in pkt4, should be 0x%x\n",
 		       chksum, orig_chksum);
@@ -474,16 +484,18 @@ void test_utils(void)
 	net_pkt_unref(pkt);
 
 	/* Another packet that fits to one fragment and which has correct
-	 * checksum. This one has ethernet header before IPv4 data.
+	 * checksum.
 	 */
-	pkt = net_pkt_get_reserve_rx(0, K_FOREVER);
-	frag = net_pkt_get_reserve_rx_data(sizeof(struct net_eth_hdr),
-					    K_FOREVER);
+	pkt = net_pkt_get_reserve_rx(K_SECONDS(1));
+	zassert_not_null(pkt, "Out of mem");
+
+	frag = net_pkt_get_reserve_rx_data(K_SECONDS(1));
+	zassert_not_null(frag, "Out of mem");
+
 	net_pkt_frag_add(pkt, frag);
 
-	net_pkt_set_ll_reserve(pkt, sizeof(struct net_eth_hdr));
-	memcpy(net_pkt_ll(pkt), pkt5, sizeof(pkt5));
-	net_buf_add(frag, sizeof(pkt5) - sizeof(struct net_eth_hdr));
+	memcpy(net_pkt_data(pkt), pkt5, sizeof(pkt5));
+	net_buf_add(frag, sizeof(pkt5));
 
 	net_pkt_set_ip_hdr_len(pkt, sizeof(struct net_ipv4_hdr));
 	net_pkt_set_family(pkt, AF_INET);
@@ -494,7 +506,7 @@ void test_utils(void)
 	frag->data[hdr_len + 2] = 0;
 	frag->data[hdr_len + 3] = 0;
 
-	chksum = ntohs(~net_calc_chksum(pkt, IPPROTO_ICMP));
+	chksum = ntohs(net_calc_chksum(pkt, IPPROTO_ICMP));
 	if (chksum != orig_chksum) {
 		printk("Invalid chksum 0x%x in pkt5, should be 0x%x\n",
 		       chksum, orig_chksum);
@@ -1248,7 +1260,7 @@ void test_addr_parse(void)
 
 #if defined(CONFIG_NET_IPV4)
 	for (i = 0; i < ARRAY_SIZE(parse_ipv4_entries) - 1; i++) {
-		memset(&addr, 0, sizeof(addr));
+		(void)memset(&addr, 0, sizeof(addr));
 
 		ret = net_ipaddr_parse(
 			parse_ipv4_entries[i].address,
@@ -1277,7 +1289,7 @@ void test_addr_parse(void)
 #endif
 #if defined(CONFIG_NET_IPV6)
 	for (i = 0; i < ARRAY_SIZE(parse_ipv6_entries) - 1; i++) {
-		memset(&addr, 0, sizeof(addr));
+		(void)memset(&addr, 0, sizeof(addr));
 
 		ret = net_ipaddr_parse(
 			parse_ipv6_entries[i].address,
@@ -1312,12 +1324,14 @@ void test_net_pkt_addr_parse(void)
 	static struct ipv6_test_data {
 		const unsigned char *payload;
 		int payload_len;
+		u8_t proto;
 		struct sockaddr_in6 src;
 		struct sockaddr_in6 dst;
 	} ipv6_test_data_set[] = {
 		{
 			.payload = v6_udp_pkt1,
 			.payload_len = sizeof(v6_udp_pkt1),
+			.proto = IPPROTO_UDP,
 			.src = {
 				.sin6_family = AF_INET6,
 				.sin6_port = htons(5353),
@@ -1351,6 +1365,7 @@ void test_net_pkt_addr_parse(void)
 		{
 			.payload = v6_tcp_pkt1,
 			.payload_len = sizeof(v6_tcp_pkt1),
+			.proto = IPPROTO_TCP,
 			.src = {
 				.sin6_family = AF_INET6,
 				.sin6_port = htons(62032),
@@ -1388,12 +1403,14 @@ void test_net_pkt_addr_parse(void)
 	static struct ipv4_test_data {
 		const unsigned char *payload;
 		int payload_len;
+		u8_t proto;
 		struct sockaddr_in src;
 		struct sockaddr_in dst;
 	} ipv4_test_data_set[] = {
 		{
 			.payload = v4_tcp_pkt1,
 			.payload_len = sizeof(v4_tcp_pkt1),
+			.proto = IPPROTO_TCP,
 			.src = {
 				.sin_family = AF_INET,
 				.sin_port = htons(22),
@@ -1419,6 +1436,7 @@ void test_net_pkt_addr_parse(void)
 		{
 			.payload = v4_udp_pkt1,
 			.payload_len = sizeof(v4_udp_pkt1),
+			.proto = IPPROTO_UDP,
 			.src = {
 				.sin_family = AF_INET,
 				.sin_port = htons(64426),
@@ -1451,24 +1469,21 @@ void test_net_pkt_addr_parse(void)
 		struct sockaddr_in6 addr;
 		struct ipv6_test_data *data = &ipv6_test_data_set[i];
 
-		pkt = net_pkt_get_reserve_rx(0, K_FOREVER);
-		frag = net_pkt_get_reserve_rx_data(sizeof(struct net_eth_hdr),
-						   K_FOREVER);
+		pkt = net_pkt_get_reserve_rx(K_SECONDS(1));
+		zassert_not_null(pkt, "Out of mem");
+
+		frag = net_pkt_get_reserve_rx_data(K_SECONDS(1));
+		zassert_not_null(frag, "Out of mem");
+
 		net_pkt_frag_add(pkt, frag);
 
-		/* Copy ll header */
-		net_pkt_set_ll_reserve(pkt, sizeof(struct net_eth_hdr));
-		memcpy(net_pkt_ll(pkt), data->payload,
-		       sizeof(struct net_eth_hdr));
-
-		/* Copy remain data */
-		net_pkt_append(pkt,
-			       data->payload_len - sizeof(struct net_eth_hdr),
-			       data->payload + sizeof(struct net_eth_hdr),
+		/* Copy data */
+		net_pkt_append(pkt, data->payload_len, data->payload,
 			       K_FOREVER);
 
 		net_pkt_set_ip_hdr_len(pkt, sizeof(struct net_ipv6_hdr));
 		net_pkt_set_family(pkt, AF_INET6);
+		net_pkt_set_transport_proto(pkt, data->proto);
 
 		zassert_equal(net_pkt_get_src_addr(pkt,
 						   (struct sockaddr *)&addr,
@@ -1503,24 +1518,21 @@ void test_net_pkt_addr_parse(void)
 		struct sockaddr_in addr;
 		struct ipv4_test_data *data = &ipv4_test_data_set[i];
 
-		pkt = net_pkt_get_reserve_rx(0, K_FOREVER);
-		frag = net_pkt_get_reserve_rx_data(sizeof(struct net_eth_hdr),
-						   K_FOREVER);
+		pkt = net_pkt_get_reserve_rx(K_SECONDS(1));
+		zassert_not_null(pkt, "Out of mem");
+
+		frag = net_pkt_get_reserve_rx_data(K_SECONDS(1));
+		zassert_not_null(frag, "Out of mem");
+
 		net_pkt_frag_add(pkt, frag);
 
-		/* Copy ll header */
-		net_pkt_set_ll_reserve(pkt, sizeof(struct net_eth_hdr));
-		memcpy(net_pkt_ll(pkt), data->payload,
-		       sizeof(struct net_eth_hdr));
-
-		/* Copy remain data */
-		net_pkt_append(pkt,
-			       data->payload_len - sizeof(struct net_eth_hdr),
-			       data->payload + sizeof(struct net_eth_hdr),
+		/* Copy data */
+		net_pkt_append(pkt, data->payload_len, data->payload,
 			       K_FOREVER);
 
 		net_pkt_set_ip_hdr_len(pkt, sizeof(struct net_ipv4_hdr));
 		net_pkt_set_family(pkt, AF_INET);
+		net_pkt_set_transport_proto(pkt, data->proto);
 
 		zassert_equal(net_pkt_get_src_addr(pkt,
 						   (struct sockaddr *)&addr,

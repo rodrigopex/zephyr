@@ -4,11 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if defined(CONFIG_NET_DEBUG_L2_IEEE802154) || \
-	defined(CONFIG_NET_DEBUG_L2_IEEE802154_DISPLAY_PACKET)
-#define SYS_LOG_DOMAIN "net/ieee802154"
-#define NET_LOG_ENABLED 1
-#endif
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_ieee802154, CONFIG_NET_L2_IEEE802154_LOG_LEVEL);
 
 #include <net/net_core.h>
 #include <net/net_l2.h>
@@ -18,12 +15,8 @@
 
 #include <errno.h>
 
-#ifdef CONFIG_NET_6LO
-#ifdef CONFIG_NET_L2_IEEE802154_FRAGMENT
 #include "ieee802154_fragment.h"
-#endif
 #include <6lo.h>
-#endif /* CONFIG_NET_6LO */
 
 #include <net/ieee802154_radio.h>
 
@@ -31,6 +24,19 @@
 #include "ieee802154_mgmt_priv.h"
 #include "ieee802154_security.h"
 #include "ieee802154_utils.h"
+#include "ieee802154_radio_utils.h"
+
+#define BUF_TIMEOUT K_MSEC(50)
+
+/* No need to hold space for the FCS */
+static u8_t frame_buffer_data[IEEE802154_MTU - 2];
+
+static struct net_buf frame_buf = {
+	.data = frame_buffer_data,
+	.size = IEEE802154_MTU - 2,
+	.frags = NULL,
+	.__buf = frame_buffer_data,
+};
 
 #define PKT_TITLE      "IEEE 802.15.4 packet content:"
 #define TX_PKT_TITLE   "> " PKT_TITLE
@@ -41,24 +47,18 @@
 #include "net_private.h"
 
 static inline void pkt_hexdump(const char *title, struct net_pkt *pkt,
-			       bool in, bool full)
+			       bool in)
 {
-	if ((IS_ENABLED(CONFIG_NET_DEBUG_L2_IEEE802154_DISPLAY_PACKET_RX) ||
-	     IS_ENABLED(CONFIG_NET_DEBUG_L2_IEEE802154_DISPLAY_PACKET_FULL)) &&
+	if (IS_ENABLED(CONFIG_NET_DEBUG_L2_IEEE802154_DISPLAY_PACKET_RX) &&
 	    in) {
-		net_hexdump_frags(title, pkt, full);
+		net_hexdump_frags(title, pkt, false);
 	}
 
-	if ((IS_ENABLED(CONFIG_NET_DEBUG_L2_IEEE802154_DISPLAY_PACKET_TX) ||
-	     IS_ENABLED(CONFIG_NET_DEBUG_L2_IEEE802154_DISPLAY_PACKET_FULL)) &&
+	if (IS_ENABLED(CONFIG_NET_DEBUG_L2_IEEE802154_DISPLAY_PACKET_TX) &&
 	    !in) {
-		net_hexdump_frags(title, pkt, full);
+		net_hexdump_frags(title, pkt, false);
 	}
 }
-
-#ifndef CONFIG_NET_DEBUG_L2_IEEE802154
-#undef NET_LOG_ENABLED
-#endif /* CONFIG_NET_DEBUG_L2_IEEE802154 */
 
 #else
 #define pkt_hexdump(...)
@@ -75,12 +75,16 @@ static inline void ieee802154_acknowledge(struct net_if *iface,
 		return;
 	}
 
-	pkt = net_pkt_get_reserve_tx(IEEE802154_ACK_PKT_LENGTH, K_FOREVER);
+	pkt = net_pkt_get_reserve_tx(BUF_TIMEOUT);
 	if (!pkt) {
 		return;
 	}
 
-	frag = net_pkt_get_frag(pkt, K_FOREVER);
+	frag = net_pkt_get_frag(pkt, BUF_TIMEOUT);
+	if (!frag) {
+		net_pkt_unref(pkt);
+		return;
+	}
 
 	net_pkt_frag_insert(pkt, frag);
 
@@ -126,7 +130,8 @@ static inline void set_pkt_ll_addr(struct net_linkaddr *addr, bool comp,
 #ifdef CONFIG_NET_6LO
 static inline
 enum net_verdict ieee802154_manage_recv_packet(struct net_if *iface,
-					       struct net_pkt *pkt)
+					       struct net_pkt *pkt,
+					       size_t hdr_len)
 {
 	enum net_verdict verdict = NET_CONTINUE;
 	u32_t src;
@@ -135,25 +140,27 @@ enum net_verdict ieee802154_manage_recv_packet(struct net_if *iface,
 	/* Upper IP stack expects the link layer address to be in
 	 * big endian format so we must swap it here.
 	 */
-	if (net_pkt_ll_src(pkt)->addr &&
-	    net_pkt_ll_src(pkt)->len == IEEE802154_EXT_ADDR_LENGTH) {
-		sys_mem_swap(net_pkt_ll_src(pkt)->addr,
-			     net_pkt_ll_src(pkt)->len);
+	if (net_pkt_lladdr_src(pkt)->addr &&
+	    net_pkt_lladdr_src(pkt)->len == IEEE802154_EXT_ADDR_LENGTH) {
+		sys_mem_swap(net_pkt_lladdr_src(pkt)->addr,
+			     net_pkt_lladdr_src(pkt)->len);
 	}
 
-	if (net_pkt_ll_dst(pkt)->addr &&
-	    net_pkt_ll_dst(pkt)->len == IEEE802154_EXT_ADDR_LENGTH) {
-		sys_mem_swap(net_pkt_ll_dst(pkt)->addr,
-			     net_pkt_ll_dst(pkt)->len);
+	if (net_pkt_lladdr_dst(pkt)->addr &&
+	    net_pkt_lladdr_dst(pkt)->len == IEEE802154_EXT_ADDR_LENGTH) {
+		sys_mem_swap(net_pkt_lladdr_dst(pkt)->addr,
+			     net_pkt_lladdr_dst(pkt)->len);
 	}
 
 	/** Uncompress will drop the current fragment. Pkt ll src/dst address
 	 * will then be wrong and must be updated according to the new fragment.
 	 */
-	src = net_pkt_ll_src(pkt)->addr ?
-		net_pkt_ll_src(pkt)->addr - net_pkt_ll(pkt) : 0;
-	dst = net_pkt_ll_dst(pkt)->addr ?
-		net_pkt_ll_dst(pkt)->addr - net_pkt_ll(pkt) : 0;
+	src = net_pkt_lladdr_src(pkt)->addr ?
+		net_pkt_lladdr_src(pkt)->addr -
+		(net_pkt_data(pkt) - hdr_len) : 0;
+	dst = net_pkt_lladdr_dst(pkt)->addr ?
+		net_pkt_lladdr_dst(pkt)->addr -
+		(net_pkt_data(pkt) - hdr_len) : 0;
 
 #ifdef CONFIG_NET_L2_IEEE802154_FRAGMENT
 	verdict = ieee802154_reassemble(pkt);
@@ -167,45 +174,26 @@ enum net_verdict ieee802154_manage_recv_packet(struct net_if *iface,
 		goto out;
 	}
 #endif
-	net_pkt_ll_src(pkt)->addr = src ? net_pkt_ll(pkt) + src : NULL;
-	net_pkt_ll_dst(pkt)->addr = dst ? net_pkt_ll(pkt) + dst : NULL;
+	net_pkt_lladdr_src(pkt)->addr = src ?
+		(net_pkt_data(pkt) - hdr_len) + src : NULL;
+	net_pkt_lladdr_dst(pkt)->addr = dst ?
+		(net_pkt_data(pkt) - hdr_len) + dst : NULL;
 
-	pkt_hexdump(RX_PKT_TITLE, pkt, true, false);
+	pkt_hexdump(RX_PKT_TITLE, pkt, true);
 out:
 	return verdict;
 }
-
-static inline bool ieee802154_manage_send_packet(struct net_if *iface,
-						 struct net_pkt *pkt)
-{
-	bool ret;
-
-	pkt_hexdump(TX_PKT_TITLE " (before 6lo)", pkt, false, false);
-
-#ifdef CONFIG_NET_L2_IEEE802154_FRAGMENT
-	ret = net_6lo_compress(pkt, true, ieee802154_fragment);
-#else
-	ret = net_6lo_compress(pkt, true, NULL);
-#endif
-
-	pkt_hexdump(TX_PKT_TITLE " (after 6lo)", pkt, false, false);
-
-	return ret;
-}
-
 #else /* CONFIG_NET_6LO */
-
 #define ieee802154_manage_recv_packet(...) NET_CONTINUE
-#define ieee802154_manage_send_packet(...) true
-
 #endif /* CONFIG_NET_6LO */
 
 static enum net_verdict ieee802154_recv(struct net_if *iface,
 					struct net_pkt *pkt)
 {
 	struct ieee802154_mpdu mpdu;
+	size_t hdr_len;
 
-	if (!ieee802154_validate_frame(net_pkt_ll(pkt),
+	if (!ieee802154_validate_frame(net_pkt_data(pkt),
 				       net_pkt_get_len(pkt), &mpdu)) {
 		return NET_DROP;
 	}
@@ -227,65 +215,95 @@ static enum net_verdict ieee802154_recv(struct net_if *iface,
 
 	ieee802154_acknowledge(iface, &mpdu);
 
-	net_pkt_set_ll_reserve(pkt, mpdu.payload - (void *)net_pkt_ll(pkt));
-	net_buf_pull(pkt->frags, net_pkt_ll_reserve(pkt));
-
-	set_pkt_ll_addr(net_pkt_ll_src(pkt), mpdu.mhr.fs->fc.pan_id_comp,
+	set_pkt_ll_addr(net_pkt_lladdr_src(pkt), mpdu.mhr.fs->fc.pan_id_comp,
 			mpdu.mhr.fs->fc.src_addr_mode, mpdu.mhr.src_addr);
 
-	set_pkt_ll_addr(net_pkt_ll_dst(pkt), false,
+	set_pkt_ll_addr(net_pkt_lladdr_dst(pkt), false,
 			mpdu.mhr.fs->fc.dst_addr_mode, mpdu.mhr.dst_addr);
 
 	if (!ieee802154_decipher_data_frame(iface, pkt, &mpdu)) {
 		return NET_DROP;
 	}
 
-	pkt_hexdump(RX_PKT_TITLE " (with ll)", pkt, true, true);
+	pkt_hexdump(RX_PKT_TITLE " (with ll)", pkt, true);
 
-	return ieee802154_manage_recv_packet(iface, pkt);
+	hdr_len = (u8_t *)mpdu.payload - net_pkt_data(pkt);
+	net_buf_pull(pkt->frags, hdr_len);
+
+	return ieee802154_manage_recv_packet(iface, pkt, hdr_len);
+
 }
 
-static enum net_verdict ieee802154_send(struct net_if *iface,
-					struct net_pkt *pkt)
+static int ieee802154_send(struct net_if *iface, struct net_pkt *pkt)
 {
 	struct ieee802154_context *ctx = net_if_l2_data(iface);
-	u8_t reserved_space = net_pkt_ll_reserve(pkt);
+	struct ieee802154_fragment_ctx f_ctx;
 	struct net_buf *frag;
+	u8_t ll_hdr_size;
+	bool fragment;
+	int len;
 
 	if (net_pkt_family(pkt) != AF_INET6) {
-		return NET_DROP;
+		return -EINVAL;
 	}
 
-	if (!ieee802154_manage_send_packet(iface, pkt)) {
-		return NET_DROP;
+	ll_hdr_size = ieee802154_compute_header_size(iface,
+						     &NET_IPV6_HDR(pkt)->dst);
+
+	/* len will hold the hdr size difference on success */
+	len = net_6lo_compress(pkt, true);
+	if (len < 0) {
+		return len;
 	}
 
+	fragment = ieee802154_fragment_is_needed(pkt, ll_hdr_size);
+	ieee802154_fragment_ctx_init(&f_ctx, pkt, len, true);
+
+	len = 0;
+	frame_buf.len = 0;
 	frag = pkt->frags;
+
 	while (frag) {
-		if (frag->len > IEEE802154_MTU) {
-			NET_ERR("Frag %p as too big length %u",
-				frag, frag->len);
-			return NET_DROP;
+		int ret;
+
+		net_buf_add(&frame_buf, ll_hdr_size);
+
+		if (fragment) {
+			ieee802154_fragment(&f_ctx, &frame_buf, true);
+			frag = f_ctx.frag;
+		} else {
+			memcpy(frame_buf.data + frame_buf.len,
+			       frag->data, frag->len);
+			net_buf_add(&frame_buf, frag->len);
+			frag = frag->frags;
 		}
 
-		if (!ieee802154_create_data_frame(ctx, net_pkt_ll_dst(pkt),
-						  frag, reserved_space)) {
-			return NET_DROP;
+		if (!ieee802154_create_data_frame(ctx, net_pkt_lladdr_dst(pkt),
+						  &frame_buf, ll_hdr_size)) {
+			return -EINVAL;
 		}
 
-		frag = frag->frags;
+		if (IS_ENABLED(CONFIG_NET_L2_IEEE802154_RADIO_CSMA_CA) &&
+		    ieee802154_get_hw_capabilities(iface) &
+		    IEEE802154_HW_CSMA) {
+			ret = ieee802154_tx(iface, pkt, &frame_buf);
+		} else {
+			ret = ieee802154_radio_send(iface, pkt, &frame_buf);
+		}
+
+		if (ret) {
+			return ret;
+		}
+
+		len += frame_buf.len;
+
+		/* Reinitializing frame_buf */
+		frame_buf.len = 0;
 	}
 
-	pkt_hexdump(TX_PKT_TITLE " (with ll)", pkt, false, true);
+	net_pkt_unref(pkt);
 
-	net_if_queue_tx(iface, pkt);
-
-	return NET_OK;
-}
-
-static u16_t ieee802154_reserve(struct net_if *iface, void *data)
-{
-	return ieee802154_compute_header_size(iface, (struct in6_addr *)data);
+	return len;
 }
 
 static int ieee802154_enable(struct net_if *iface, bool state)
@@ -305,9 +323,16 @@ static int ieee802154_enable(struct net_if *iface, bool state)
 	return ieee802154_stop(iface);
 }
 
+enum net_l2_flags ieee802154_flags(struct net_if *iface)
+{
+	struct ieee802154_context *ctx = net_if_l2_data(iface);
+
+	return ctx->flags;
+}
+
 NET_L2_INIT(IEEE802154_L2,
 	    ieee802154_recv, ieee802154_send,
-	    ieee802154_reserve, ieee802154_enable);
+	    ieee802154_enable, ieee802154_flags);
 
 void ieee802154_init(struct net_if *iface)
 {
@@ -319,6 +344,7 @@ void ieee802154_init(struct net_if *iface)
 	NET_DBG("Initializing IEEE 802.15.4 stack on iface %p", iface);
 
 	ctx->channel = IEEE802154_NO_CHANNEL;
+	ctx->flags = NET_L2_MULTICAST;
 
 	ieee802154_mgmt_init(iface);
 

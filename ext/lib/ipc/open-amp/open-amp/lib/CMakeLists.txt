@@ -6,7 +6,6 @@ collect (PROJECT_LIB_DIRS "${CMAKE_CURRENT_BINARY_DIR}")
 collect (PROJECT_INC_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 
-add_subdirectory (common)
 add_subdirectory (virtio)
 add_subdirectory (rpmsg)
 add_subdirectory (remoteproc)
@@ -35,7 +34,7 @@ set_property (SOURCE ${_sources}
 # Build a shared library if so configured.
 if (WITH_ZEPHYR)
   zephyr_library_named(${OPENAMP_LIB})
-  add_dependencies(${OPENAMP_LIB} offsets_h)
+  add_dependencies(${OPENAMP_LIB} ${OFFSETS_H_TARGET})
   target_sources (${OPENAMP_LIB} PRIVATE ${_sources})
   zephyr_include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 else (WITH_ZEPHYR)

@@ -1,11 +1,16 @@
 zephyr_library()
 
-if (COMPILER STREQUAL "clang")
+if (CMAKE_C_COMPILER_ID STREQUAL "Clang")
   # We rely on GAS for assembling, so don't use the integrated assembler
   zephyr_compile_options_ifndef(CONFIG_X86_IAMCU $<$<COMPILE_LANGUAGE:ASM>:-no-integrated-as>)
+elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+  zephyr_compile_options($<$<COMPILE_LANGUAGE:ASM>:-Wa,--divide>)
 endif()
 
-zephyr_compile_options($<$<COMPILE_LANGUAGE:ASM>:-Wa,--divide>)
+zephyr_compile_options_ifdef(CONFIG_COVERAGE_GCOV
+  -ftest-coverage
+  -fprofile-arcs
+  )
 
 zephyr_library_sources(
   cache.c

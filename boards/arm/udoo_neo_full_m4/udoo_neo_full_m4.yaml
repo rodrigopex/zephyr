@@ -12,4 +12,11 @@ ram: 32
 flash: 512
 toolchain:
   - zephyr
-  - gccarmemb
+  - gnuarmemb
+  - xtools
+supported:
+  - uart
+  - gpio
+  - counter
+testing:
+  default: true

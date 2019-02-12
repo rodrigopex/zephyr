@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef _kernel_structs__h_
-#define _kernel_structs__h_
+#ifndef ZEPHYR_KERNEL_INCLUDE_KERNEL_STRUCTS_H_
+#define ZEPHYR_KERNEL_INCLUDE_KERNEL_STRUCTS_H_
 
 #include <kernel.h>
 
@@ -13,6 +13,7 @@
 #include <atomic.h>
 #include <misc/dlist.h>
 #include <misc/rb.h>
+#include <misc/util.h>
 #include <string.h>
 #endif
 
@@ -31,22 +32,22 @@
 /* states: common uses low bits, arch-specific use high bits */
 
 /* Not a real thread */
-#define _THREAD_DUMMY (1 << 0)
+#define _THREAD_DUMMY (BIT(0))
 
 /* Thread is waiting on an object */
-#define _THREAD_PENDING (1 << 1)
+#define _THREAD_PENDING (BIT(1))
 
 /* Thread has not yet started */
-#define _THREAD_PRESTART (1 << 2)
+#define _THREAD_PRESTART (BIT(2))
 
 /* Thread has terminated */
-#define _THREAD_DEAD (1 << 3)
+#define _THREAD_DEAD (BIT(3))
 
 /* Thread is suspended */
-#define _THREAD_SUSPENDED (1 << 4)
+#define _THREAD_SUSPENDED (BIT(4))
 
 /* Thread is present in the ready queue */
-#define _THREAD_QUEUED (1 << 6)
+#define _THREAD_QUEUED (BIT(6))
 
 /* end - states */
 
@@ -71,10 +72,12 @@ struct _ready_q {
 	struct k_thread *cache;
 #endif
 
-#ifdef CONFIG_SCHED_DUMB
+#if defined(CONFIG_SCHED_DUMB)
 	sys_dlist_t runq;
-#else
+#elif defined(CONFIG_SCHED_SCALABLE)
 	struct _priq_rb runq;
+#elif defined(CONFIG_SCHED_MULTIQ)
+	struct _priq_mq runq;
 #endif
 };
 
@@ -93,6 +96,11 @@ struct _cpu {
 	/* one assigned idle thread per CPU */
 	struct k_thread *idle_thread;
 
+#ifdef CONFIG_TIMESLICING
+	/* number of ticks remaining in current time slice */
+	int slice_ticks;
+#endif
+
 	u8_t id;
 
 #ifdef CONFIG_SMP
@@ -103,7 +111,7 @@ struct _cpu {
 
 typedef struct _cpu _cpu_t;
 
-struct _kernel {
+struct z_kernel {
 	/* For compatibility with pre-SMP code, union the first CPU
 	 * record with the legacy fields so code can continue to use
 	 * the "_kernel.XXX" expressions and assembly offsets.
@@ -161,9 +169,9 @@ struct _kernel {
 	struct _kernel_arch arch;
 };
 
-typedef struct _kernel _kernel_t;
+typedef struct z_kernel _kernel_t;
 
-extern struct _kernel _kernel;
+extern struct z_kernel _kernel;
 
 #ifdef CONFIG_SMP
 #define _current_cpu (_arch_curr_cpu())
@@ -173,9 +181,7 @@ extern struct _kernel _kernel;
 #define _current _kernel.current
 #endif
 
-#define _ready_q _kernel.ready_q
 #define _timeout_q _kernel.timeout_q
-#define _threads _kernel.threads
 
 #include <kernel_arch_func.h>
 
@@ -234,6 +240,10 @@ static ALWAYS_INLINE void _new_thread_init(struct k_thread *thread,
 	thread->custom_data = NULL;
 #endif
 
+#ifdef CONFIG_THREAD_NAME
+	thread->name = NULL;
+#endif
+
 #if defined(CONFIG_USERSPACE)
 	thread->mem_domain_info.mem_domain = NULL;
 #endif /* CONFIG_USERSPACE */
@@ -246,4 +256,4 @@ static ALWAYS_INLINE void _new_thread_init(struct k_thread *thread,
 
 #endif /* _ASMLANGUAGE */
 
-#endif /* _kernel_structs__h_ */
+#endif /* ZEPHYR_KERNEL_INCLUDE_KERNEL_STRUCTS_H_ */

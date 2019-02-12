@@ -7,19 +7,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if 1
-#define SYS_LOG_DOMAIN "echo-server"
-#define NET_SYS_LOG_LEVEL SYS_LOG_LEVEL_DEBUG
-#define NET_LOG_ENABLED 1
-#endif
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_echo_server_sample, LOG_LEVEL_DBG);
 
 #include <zephyr.h>
 #include <linker/sections.h>
 #include <errno.h>
 
 #include <net/net_core.h>
+#include <net/tls_credentials.h>
 
 #include "common.h"
+#include "certificate.h"
 
 #define APP_BANNER "Run echo server"
 
@@ -43,7 +42,27 @@ static void init_app(void)
 {
 	k_sem_init(&quit_lock, 0, UINT_MAX);
 
-	NET_INFO(APP_BANNER);
+	LOG_INF(APP_BANNER);
+
+#if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
+	int err = tls_credential_add(SERVER_CERTIFICATE_TAG,
+				     TLS_CREDENTIAL_SERVER_CERTIFICATE,
+				     server_certificate,
+				     sizeof(server_certificate));
+	if (err < 0) {
+		LOG_ERR("Failed to register public certificate: %d", err);
+	}
+
+
+	err = tls_credential_add(SERVER_CERTIFICATE_TAG,
+				 TLS_CREDENTIAL_PRIVATE_KEY,
+				 private_key, sizeof(private_key));
+	if (err < 0) {
+		LOG_ERR("Failed to register private key: %d", err);
+	}
+#endif
+
+	init_vlan();
 }
 
 void main(void)
@@ -60,7 +79,7 @@ void main(void)
 
 	k_sem_take(&quit_lock, K_FOREVER);
 
-	NET_INFO("Stopping...");
+	LOG_INF("Stopping...");
 
 	if (IS_ENABLED(CONFIG_NET_TCP)) {
 		stop_tcp();

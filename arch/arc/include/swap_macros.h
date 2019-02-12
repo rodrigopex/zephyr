@@ -6,8 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#ifndef _SWAP_MACROS__H_
-#define _SWAP_MACROS__H_
+#ifndef ZEPHYR_ARCH_ARC_INCLUDE_SWAP_MACROS_H_
+#define ZEPHYR_ARCH_ARC_INCLUDE_SWAP_MACROS_H_
 
 #include <kernel_structs.h>
 #include <offsets_short.h>
@@ -76,13 +76,13 @@ extern "C" {
 
 #endif
 
-	/* save stack pointer in struct tcs */
+	/* save stack pointer in struct k_thread */
 	st sp, [r2, _thread_offset_to_sp]
 .endm
 
 /* entering this macro, current is in r2 */
 .macro _load_callee_saved_regs
-	/* restore stack pointer from struct tcs */
+	/* restore stack pointer from struct k_thread */
 	ld sp, [r2, _thread_offset_to_sp]
 
 #ifdef CONFIG_FP_SHARING
@@ -278,4 +278,4 @@ extern "C" {
 }
 #endif
 
-#endif /*  _SWAP_MACROS__H_ */
+#endif /*  ZEPHYR_ARCH_ARC_INCLUDE_SWAP_MACROS_H_ */

@@ -5,8 +5,8 @@
  *
  */
 
-#ifndef _ATAES132A_PRIV_
-#define _ATAES132A_PRIV_
+#ifndef ZEPHYR_DRIVERS_CRYPTO_CRYPTO_ATAES132A_PRIV_H_
+#define ZEPHYR_DRIVERS_CRYPTO_CRYPTO_ATAES132A_PRIV_H_
 
 #include <i2c.h>
 #include <kernel.h>
@@ -119,7 +119,7 @@ void ataes132a_atmel_crc(u8_t *input, u8_t length,
 	u16_t double_carry;
 	u8_t higher_crc_bit;
 
-	for (i = 0, crc = 0; i < length; i++) {
+	for (i = 0, crc = 0U; i < length; i++) {
 		for (j = 7; j >=  0; j--) {
 			bit = !!(input[i] & BIT(j));
 			higher_crc_bit = crc >> 15;
@@ -391,4 +391,4 @@ int ataes132a_aes_ecb_block(struct device *i2c_dev,
 			    u8_t key_id,
 			    struct cipher_pkt *pkt);
 
-#endif /* _ATAES132A_PRIV_ */
+#endif /* ZEPHYR_DRIVERS_CRYPTO_CRYPTO_ATAES132A_PRIV_H_ */

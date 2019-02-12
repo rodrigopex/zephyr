@@ -1,6 +1,5 @@
 ---
 title: STM32 PWM
-id: st,stm32-pwm
 version: 0.1
 
 description: >
@@ -8,9 +7,6 @@ description: >
 
 properties:
     compatible:
-      type: string
-      category: required
-      description: compatible strings
       constraint: "st,stm32-pwm"
 
     label:
@@ -24,4 +20,9 @@ properties:
       category: required
       description: Clock prescaler at the input of the timer
       generation: define
+
+"#cells":
+  - channel
+# period in terms of nanoseconds
+  - period
 ...

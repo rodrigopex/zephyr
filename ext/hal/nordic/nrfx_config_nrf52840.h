@@ -38,8 +38,8 @@
 
 // <e> NRFX_CLOCK_ENABLED - nrfx_clock - CLOCK peripheral driver
 //==========================================================
-#ifndef NRFX_CLOCK_ENABLED
-#define NRFX_CLOCK_ENABLED 0
+#ifdef CONFIG_NRFX_CLOCK
+#define NRFX_CLOCK_ENABLED 1
 #endif
 // <o> NRFX_CLOCK_CONFIG_LF_SRC  - LF Clock Source
 
@@ -51,6 +51,12 @@
 
 #ifndef NRFX_CLOCK_CONFIG_LF_SRC
 #define NRFX_CLOCK_CONFIG_LF_SRC 1
+#endif
+
+// <q> NRFX_CLOCK_CONFIG_LF_CAL_ENABLED  - Enables LF Clock Calibration Support
+
+#ifndef NRFX_CLOCK_CONFIG_LF_CAL_ENABLED
+#define NRFX_CLOCK_CONFIG_LF_CAL_ENABLED 0
 #endif
 
 // <o> NRFX_CLOCK_CONFIG_IRQ_PRIORITY  - Interrupt priority
@@ -262,8 +268,8 @@
 
 // <e> NRFX_GPIOTE_ENABLED - nrfx_gpiote - GPIOTE peripheral driver
 //==========================================================
-#ifndef NRFX_GPIOTE_ENABLED
-#define NRFX_GPIOTE_ENABLED 0
+#ifdef CONFIG_NRFX_GPIOTE
+#define NRFX_GPIOTE_ENABLED 1
 #endif
 // <o> NRFX_GPIOTE_CONFIG_NUM_OF_LOW_POWER_EVENTS - Number of lower power input pins
 #ifndef NRFX_GPIOTE_CONFIG_NUM_OF_LOW_POWER_EVENTS
@@ -662,6 +668,79 @@
 
 // </e>
 
+// <e> NRFX_NFCT_ENABLED - nrfx_nfct - NFCT peripheral driver
+//==========================================================
+#ifdef CONFIG_NRFX_NFCT
+#define NRFX_NFCT_ENABLED 1
+#endif
+// <o> NRFX_NFCT_CONFIG_IRQ_PRIORITY  - Interrupt priority
+
+// <0=> 0 (highest)
+// <1=> 1
+// <2=> 2
+// <3=> 3
+// <4=> 4
+// <5=> 5
+// <6=> 6
+// <7=> 7
+
+#ifndef NRFX_NFCT_CONFIG_IRQ_PRIORITY
+#define NRFX_NFCT_CONFIG_IRQ_PRIORITY 7
+#endif
+
+// <e> NRFX_NFCT_CONFIG_LOG_ENABLED - Enables logging in the module.
+//==========================================================
+#ifndef NRFX_NFCT_CONFIG_LOG_ENABLED
+#define NRFX_NFCT_CONFIG_LOG_ENABLED 0
+#endif
+// <o> NRFX_NFCT_CONFIG_LOG_LEVEL  - Default Severity level
+
+// <0=> Off
+// <1=> Error
+// <2=> Warning
+// <3=> Info
+// <4=> Debug
+
+#ifndef NRFX_NFCT_CONFIG_LOG_LEVEL
+#define NRFX_NFCT_CONFIG_LOG_LEVEL 3
+#endif
+
+// <o> NRFX_NFCT_CONFIG_INFO_COLOR  - ANSI escape code prefix.
+
+// <0=> Default
+// <1=> Black
+// <2=> Red
+// <3=> Green
+// <4=> Yellow
+// <5=> Blue
+// <6=> Magenta
+// <7=> Cyan
+// <8=> White
+
+#ifndef NRFX_NFCT_CONFIG_INFO_COLOR
+#define NRFX_NFCT_CONFIG_INFO_COLOR 0
+#endif
+
+// <o> NRFX_NFCT_CONFIG_DEBUG_COLOR  - ANSI escape code prefix.
+
+// <0=> Default
+// <1=> Black
+// <2=> Red
+// <3=> Green
+// <4=> Yellow
+// <5=> Blue
+// <6=> Magenta
+// <7=> Cyan
+// <8=> White
+
+#ifndef NRFX_NFCT_CONFIG_DEBUG_COLOR
+#define NRFX_NFCT_CONFIG_DEBUG_COLOR 0
+#endif
+
+// </e>
+
+// </e>
+
 // <e> NRFX_PDM_ENABLED - nrfx_pdm - PDM peripheral driver
 //==========================================================
 #ifndef NRFX_PDM_ENABLED
@@ -805,8 +884,8 @@
 
 // <e> NRFX_PPI_ENABLED - nrfx_ppi - PPI peripheral allocator
 //==========================================================
-#ifndef NRFX_PPI_ENABLED
-#define NRFX_PPI_ENABLED 0
+#ifdef CONFIG_NRFX_PPI
+#define NRFX_PPI_ENABLED 1
 #endif
 // <e> NRFX_PPI_CONFIG_LOG_ENABLED - Enables logging in the module.
 //==========================================================
@@ -956,34 +1035,34 @@
 
 // <e> NRFX_PWM_ENABLED - nrfx_pwm - PWM peripheral driver
 //==========================================================
-#ifndef CONFIG_NRFX_PWM
+#ifdef CONFIG_NRFX_PWM
 #define NRFX_PWM_ENABLED 1
 #endif
 // <q> NRFX_PWM0_ENABLED  - Enable PWM0 instance
 
 
-#ifndef CONFIG_PWM_0
+#ifdef CONFIG_PWM_0
 #define NRFX_PWM0_ENABLED 1
 #endif
 
 // <q> NRFX_PWM1_ENABLED  - Enable PWM1 instance
 
 
-#ifndef CONFIG_PWM_1
+#ifdef CONFIG_PWM_1
 #define NRFX_PWM1_ENABLED 1
 #endif
 
 // <q> NRFX_PWM2_ENABLED  - Enable PWM2 instance
 
 
-#ifndef CONFIG_PWM_2
+#ifdef CONFIG_PWM_2
 #define NRFX_PWM2_ENABLED 1
 #endif
 
 // <q> NRFX_PWM3_ENABLED  - Enable PWM3 instance
 
 
-#ifndef CONFIG_PWM_3
+#ifdef CONFIG_PWM_3
 #define NRFX_PWM3_ENABLED 1
 #endif
 
@@ -1134,8 +1213,8 @@
 
 // <e> NRFX_QDEC_ENABLED - nrfx_qdec - QDEC peripheral driver
 //==========================================================
-#ifndef NRFX_QDEC_ENABLED
-#define NRFX_QDEC_ENABLED 0
+#ifdef CONFIG_NRFX_QDEC
+#define NRFX_QDEC_ENABLED 1
 #endif
 // <o> NRFX_QDEC_CONFIG_REPORTPER  - Report period
 
@@ -1494,6 +1573,22 @@
 
 // <e> NRFX_RTC_ENABLED - nrfx_rtc - RTC peripheral driver
 //==========================================================
+#ifdef CONFIG_NRFX_RTC
+#define NRFX_RTC_ENABLED 1
+#endif
+
+#ifdef CONFIG_NRFX_RTC0
+#define NRFX_RTC0_ENABLED 1
+#endif
+
+#ifdef CONFIG_NRFX_RTC1
+#define NRFX_RTC1_ENABLED 1
+#endif
+
+#ifdef CONFIG_NRFX_RTC2
+#define NRFX_RTC2_ENABLED 1
+#endif
+
 #ifndef NRFX_RTC_ENABLED
 #define NRFX_RTC_ENABLED 0
 #endif
@@ -1607,8 +1702,8 @@
 
 // <e> NRFX_SAADC_ENABLED - nrfx_saadc - SAADC peripheral driver
 //==========================================================
-#ifndef NRFX_SAADC_ENABLED
-#define NRFX_SAADC_ENABLED 0
+#ifdef CONFIG_NRFX_SAADC
+#define NRFX_SAADC_ENABLED 1
 #endif
 // <o> NRFX_SAADC_CONFIG_RESOLUTION  - Resolution
 
@@ -1829,9 +1924,9 @@
 // </e>
 
 // <q> NRFX_SPIM3_NRF52840_ANOMALY_198_WORKAROUND_ENABLED  - Enables nRF52840 anomaly 198 workaround for SPIM3.
- 
 
-// <i> See more in the Errata document located at 
+
+// <i> See more in the Errata document located at
 // <i> https://infocenter.nordicsemi.com/
 
 #ifndef NRFX_SPIM3_NRF52840_ANOMALY_198_WORKAROUND_ENABLED
@@ -2160,50 +2255,50 @@
 // </e>
 
 // <q> NRFX_SYSTICK_ENABLED  - nrfx_systick - ARM(R) SysTick driver
-
-
-#ifndef NRFX_SYSTICK_ENABLED
-#define NRFX_SYSTICK_ENABLED 0
+//==========================================================
+#ifdef CONFIG_NRFX_SYSTICK
+#define NRFX_SYSTICK_ENABLED 1
 #endif
 
 // <e> NRFX_TIMER_ENABLED - nrfx_timer - TIMER periperal driver
 //==========================================================
-#ifndef NRFX_TIMER_ENABLED
-#define NRFX_TIMER_ENABLED 0
+#ifdef CONFIG_NRFX_TIMER
+#define NRFX_TIMER_ENABLED 1
 #endif
+
 // <q> NRFX_TIMER0_ENABLED  - Enable TIMER0 instance
 
 
-#ifndef NRFX_TIMER0_ENABLED
-#define NRFX_TIMER0_ENABLED 0
+#ifdef CONFIG_NRFX_TIMER0
+#define NRFX_TIMER0_ENABLED 1
 #endif
 
 // <q> NRFX_TIMER1_ENABLED  - Enable TIMER1 instance
 
 
-#ifndef NRFX_TIMER1_ENABLED
-#define NRFX_TIMER1_ENABLED 0
+#ifdef CONFIG_NRFX_TIMER1
+#define NRFX_TIMER1_ENABLED 1
 #endif
 
 // <q> NRFX_TIMER2_ENABLED  - Enable TIMER2 instance
 
 
-#ifndef NRFX_TIMER2_ENABLED
-#define NRFX_TIMER2_ENABLED 0
+#ifdef CONFIG_NRFX_TIMER2
+#define NRFX_TIMER2_ENABLED 1
 #endif
 
 // <q> NRFX_TIMER3_ENABLED  - Enable TIMER3 instance
 
 
-#ifndef NRFX_TIMER3_ENABLED
-#define NRFX_TIMER3_ENABLED 0
+#ifdef CONFIG_NRFX_TIMER3
+#define NRFX_TIMER3_ENABLED 1
 #endif
 
 // <q> NRFX_TIMER4_ENABLED  - Enable TIMER4 instance
 
 
-#ifndef NRFX_TIMER4_ENABLED
-#define NRFX_TIMER4_ENABLED 0
+#ifdef CONFIG_NRFX_TIMER4
+#define NRFX_TIMER4_ENABLED 1
 #endif
 
 // <o> NRFX_TIMER_DEFAULT_CONFIG_FREQUENCY  - Timer frequency if in Timer mode
@@ -2901,6 +2996,101 @@
 
 // </e>
 
+// <e> NRFX_USBD_ENABLED - nrfx_usbd - USBD peripheral driver
+//==========================================================
+#ifdef CONFIG_NRFX_USBD
+#define NRFX_USBD_ENABLED 1
+#endif
+// <o> NRFX_USBD_CONFIG_IRQ_PRIORITY  - Interrupt priority
+
+// <0=> 0 (highest)
+// <1=> 1
+// <2=> 2
+// <3=> 3
+// <4=> 4
+// <5=> 5
+// <6=> 6
+// <7=> 7
+
+#ifndef NRFX_USBD_CONFIG_IRQ_PRIORITY
+#define NRFX_USBD_CONFIG_IRQ_PRIORITY 7
+#endif
+
+// <q> USBD_CONFIG_DMASCHEDULER_ISO_BOOST  - Give priority to isochronous transfers
+
+// <i> This option gives priority to isochronous transfers.
+// <i> Enabling it assures that isochronous transfers are always processed,
+// <i> even if multiple other transfers are pending.
+// <i> Isochronous endpoints are prioritized before the usbd_dma_scheduler_algorithm
+// <i> function is called, so the option is independent of the algorithm chosen.
+
+#ifndef NRFX_USBD_CONFIG_DMASCHEDULER_ISO_BOOST
+#define NRFX_USBD_CONFIG_DMASCHEDULER_ISO_BOOST 1
+#endif
+
+// <q> USBD_CONFIG_ISO_IN_ZLP  - Respond to an IN token on ISO IN endpoint with ZLP when no data is ready
+
+
+// <i> If set, ISO IN endpoint will respond to an IN token with ZLP when no data is ready to be sent.
+// <i> Else, there will be no response.
+
+#ifndef NRFX_USBD_CONFIG_ISO_IN_ZLP
+#define NRFX_USBD_CONFIG_ISO_IN_ZLP 0
+#endif
+
+// <e> NRFX_USBD_CONFIG_LOG_ENABLED - Enable logging in the module
+//==========================================================
+#ifndef NRFX_USBD_CONFIG_LOG_ENABLED
+#define NRFX_USBD_CONFIG_LOG_ENABLED 0
+#endif
+// <o> NRFX_USBD_CONFIG_LOG_LEVEL  - Default Severity level
+
+// <0=> Off
+// <1=> Error
+// <2=> Warning
+// <3=> Info
+// <4=> Debug
+
+#ifndef NRFX_USBD_CONFIG_LOG_LEVEL
+#define NRFX_USBD_CONFIG_LOG_LEVEL 3
+#endif
+
+// <o> NRFX_USBD_CONFIG_INFO_COLOR  - ANSI escape code prefix.
+
+// <0=> Default
+// <1=> Black
+// <2=> Red
+// <3=> Green
+// <4=> Yellow
+// <5=> Blue
+// <6=> Magenta
+// <7=> Cyan
+// <8=> White
+
+#ifndef NRFX_USBD_CONFIG_INFO_COLOR
+#define NRFX_USBD_CONFIG_INFO_COLOR 0
+#endif
+
+// <o> NRFX_USBD_CONFIG_DEBUG_COLOR  - ANSI escape code prefix.
+
+// <0=> Default
+// <1=> Black
+// <2=> Red
+// <3=> Green
+// <4=> Yellow
+// <5=> Blue
+// <6=> Magenta
+// <7=> Cyan
+// <8=> White
+
+#ifndef NRFX_USBD_CONFIG_DEBUG_COLOR
+#define NRFX_USBD_CONFIG_DEBUG_COLOR 0
+#endif
+
+// </e>
+
+// </e>
+
 // <e> NRFX_WDT_ENABLED - nrfx_wdt - WDT peripheral driver
 //==========================================================
 #ifdef CONFIG_NRFX_WDT
@@ -2922,6 +3112,15 @@
 
 #ifndef NRFX_WDT_CONFIG_RELOAD_VALUE
 #define NRFX_WDT_CONFIG_RELOAD_VALUE 2000
+#endif
+
+// <o> NRFX_WDT_CONFIG_NO_IRQ  - Remove WDT IRQ handling from WDT driver
+
+// <0=> Include WDT IRQ handling
+// <1=> Remove WDT IRQ handling
+
+#ifndef NRFX_WDT_CONFIG_NO_IRQ
+#define NRFX_WDT_CONFIG_NO_IRQ 0
 #endif
 
 // <o> NRFX_WDT_CONFIG_IRQ_PRIORITY  - Interrupt priority

@@ -16,9 +16,9 @@ source "subsys/net/lib/http/Kconfig"
 
 source "subsys/net/lib/lwm2m/Kconfig"
 
-source "subsys/net/lib/sntp/Kconfig"
+source "subsys/net/lib/socks/Kconfig"
 
-source "subsys/net/lib/websocket/Kconfig"
+source "subsys/net/lib/sntp/Kconfig"
 
 endmenu
 
@@ -26,8 +26,8 @@ menu "Network Libraries"
 
 source "subsys/net/lib/config/Kconfig"
 
-source "subsys/net/lib/app/Kconfig"
-
 source "subsys/net/lib/sockets/Kconfig"
+
+source "subsys/net/lib/tls_credentials/Kconfig"
 
 endmenu

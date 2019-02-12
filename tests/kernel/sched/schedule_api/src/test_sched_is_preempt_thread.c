@@ -6,12 +6,9 @@
 
 #include <ztest.h>
 #include <irq_offload.h>
-
-/*macro definition*/
-#define STACK_SIZE 512
+#include "test_sched.h"
 
 /*local variables*/
-static K_THREAD_STACK_DEFINE(tstack, STACK_SIZE);
 static struct k_thread tdata;
 static struct k_sem end_sema;
 
@@ -65,6 +62,8 @@ static void tcoop_ctx(void *p1, void *p2, void *p3)
  * unlock the scheduler and call k_is_preempt_thread().
  *
  * @see k_is_preempt_thread()
+ *
+ * @ingroup kernel_sched_tests
  */
 void test_sched_is_preempt_thread(void)
 {

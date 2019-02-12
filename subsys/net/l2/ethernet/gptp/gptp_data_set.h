@@ -164,38 +164,11 @@ struct gptp_path_trace {
  * variable declared in gptp_port_ds.
  */
 struct gptp_global_ds {
-	/** The synchronized time computed by the ClockSlave entity. */
-	struct net_ptp_time sync_receipt_time;
-
-	/** Last Grand Master Phase Change. */
-	struct gptp_scaled_ns clk_src_last_gm_phase_change;
-
-	/** Last Grand Master Phase Change. */
-	struct gptp_scaled_ns last_gm_phase_change;
-
-	/** Path trace to be sent in announce message. */
-	struct gptp_path_trace path_trace;
-
-	/** Grand Master priority vector. */
-	struct gptp_priority_vector gm_priority;
-
-	/** Previous Grand Master priority vector. */
-	struct gptp_priority_vector last_gm_priority;
-
-	/** Global flags. */
-	struct gptp_flags global_flags;
-
-	/** System current flags. */
-	struct gptp_flags sys_flags;
-
 	/** Mean time interval between messages providing time-sync info. */
 	u64_t clk_master_sync_itv;
 
 	/** Value if current time. */
 	u64_t sync_receipt_local_time;
-
-	/** Time provided by the ClockSource entity minus the sync time. */
-	s64_t clk_src_phase_offset;
 
 	/** Fractional frequency offset of the Clock Source entity. */
 	double clk_src_freq_offset;
@@ -209,14 +182,41 @@ struct gptp_global_ds {
 	/** Last Grand Master Frequency Change. */
 	double last_gm_freq_change;
 
-	/** Time source. */
-	enum gptp_time_source time_source;
+	/** The synchronized time computed by the ClockSlave entity. */
+	struct net_ptp_extended_time sync_receipt_time;
 
-	/** System time source. */
-	enum gptp_time_source sys_time_source;
+	/** Last Grand Master Phase Change. */
+	struct gptp_scaled_ns clk_src_last_gm_phase_change;
 
-	/** Selected port Roles. */
-	enum gptp_port_state selected_role[CONFIG_NET_GPTP_NUM_PORTS + 1];
+	/** Last Grand Master Phase Change. */
+	struct gptp_scaled_ns last_gm_phase_change;
+
+	/** Global flags. */
+	struct gptp_flags global_flags;
+
+	/** System current flags. */
+	struct gptp_flags sys_flags;
+
+	/** Path trace to be sent in announce message. */
+	struct gptp_path_trace path_trace;
+
+	/** Grand Master priority vector. */
+	struct gptp_priority_vector gm_priority;
+
+	/** Previous Grand Master priority vector. */
+	struct gptp_priority_vector last_gm_priority;
+
+	/** Value of current_time when the last invoke call was received. */
+	struct gptp_uscaled_ns local_time;
+
+	/** Time maintained by the ClockMaster entity. */
+	struct net_ptp_extended_time master_time;
+
+	/** Time provided by the ClockSource entity minus the sync time. */
+	struct gptp_scaled_ns clk_src_phase_offset;
+
+	/** Grand Master Time Base Indicator. */
+	u16_t gm_time_base_indicator;
 
 	/** Reselect port bit array. */
 	u32_t reselect_array;
@@ -239,8 +239,14 @@ struct gptp_global_ds {
 	/** Previous Time Base Indicator. */
 	u16_t clk_src_time_base_indicator_prev;
 
-	/** Grand Master Time Base Indicator. */
-	u16_t gm_time_base_indicator;
+	/** Time source. */
+	enum gptp_time_source time_source;
+
+	/** System time source. */
+	enum gptp_time_source sys_time_source;
+
+	/** Selected port Roles. */
+	enum gptp_port_state selected_role[CONFIG_NET_GPTP_NUM_PORTS + 1];
 
 	/** A Grand Master is present in the domain. */
 	bool gm_present;
@@ -252,9 +258,6 @@ struct gptp_global_ds {
  * Data Set representing capabilities of the time-aware system.
  */
 struct gptp_default_ds {
-	/** System current flags. */
-	struct gptp_flags flags;
-
 	/** Quality of the local clock. */
 	struct gptp_clock_quality clk_quality;
 
@@ -263,6 +266,9 @@ struct gptp_default_ds {
 
 	/** Clock Identity of the local clock. */
 	u8_t clk_id[GPTP_CLOCK_ID_LEN];
+
+	/** System current flags. */
+	struct gptp_flags flags;
 
 	/** Current UTC offset. */
 	u16_t cur_utc_offset;
@@ -320,9 +326,6 @@ struct gptp_current_ds {
  * Data Set representing the parent capabilities.
  */
 struct gptp_parent_ds {
-	/** Port Identity of the Master Port attached to this system. */
-	struct gptp_port_identity port_id;
-
 	/** Ratio of the frequency of the GM with the local clock. */
 	s32_t cumulative_rate_ratio;
 
@@ -331,6 +334,9 @@ struct gptp_parent_ds {
 
 	/** Clock Class of the Grand Master clock. */
 	struct gptp_clock_quality gm_clk_quality;
+
+	/** Port Identity of the Master Port attached to this system. */
+	struct gptp_port_identity port_id;
 
 	/** Primary Priority of the Grand Master clock. */
 	u8_t gm_priority1;
@@ -376,15 +382,6 @@ struct gptp_time_prop_ds {
  * Data Set representing port capabilities.
  */
 struct gptp_port_ds {
-	/** Port Identity of the port. */
-	struct gptp_port_identity port_id;
-
-	/** Sync event transmission interval for the port. */
-	struct gptp_uscaled_ns half_sync_itv;
-
-	/** Path Delay Request transmission interval for the port. */
-	struct gptp_uscaled_ns pdelay_req_itv;
-
 	/** Maximum interval between sync messages. */
 	u64_t sync_receipt_timeout_time_itv;
 
@@ -399,6 +396,15 @@ struct gptp_port_ds {
 
 	/** Estimate of the ratio of the frequency with the peer. */
 	double neighbor_rate_ratio;
+
+	/** Port Identity of the port. */
+	struct gptp_port_identity port_id;
+
+	/** Sync event transmission interval for the port. */
+	struct gptp_uscaled_ns half_sync_itv;
+
+	/** Path Delay Request transmission interval for the port. */
+	struct gptp_uscaled_ns pdelay_req_itv;
 
 	/** Maximum number of Path Delay Requests without a response. */
 	u16_t allowed_lost_responses;
@@ -459,6 +465,9 @@ struct gptp_port_ds {
 
 	/** Whether neighborPropDelay needs to be computed for this port. */
 	bool compute_neighbor_prop_delay : 1;
+
+	/** Whether neighbor rate ratio can be used to update clocks. */
+	bool neighbor_rate_ratio_valid : 1;
 };
 
 /**

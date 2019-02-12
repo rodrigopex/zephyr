@@ -13,9 +13,9 @@
 #define SEM_LIMIT 2
 /**TESTPOINT: init via K_SEM_DEFINE*/
 K_SEM_DEFINE(ksema, SEM_INITIAL, SEM_LIMIT);
-__kernel struct k_sem sema;
+struct k_sem sema;
 static K_THREAD_STACK_DEFINE(tstack, STACK_SIZE);
-__kernel struct k_thread tdata;
+struct k_thread tdata;
 
 /*entry of contexts*/
 static void tisr_entry(void *p)
@@ -57,7 +57,7 @@ static void tsema_thread_isr(struct k_sem *psem)
  */
 
 /**
- *
+ * @brief Test synchronization of threads with semaphore
  * @see k_sem_init(), #K_SEM_DEFINE(x)
  */
 void test_sema_thread2thread(void)
@@ -72,7 +72,7 @@ void test_sema_thread2thread(void)
 }
 
 /**
- *
+ * @brief Test synchronization between thread and irq
  * @see k_sem_init(), #K_SEM_DEFINE(x)
  */
 void test_sema_thread2isr(void)
@@ -86,7 +86,7 @@ void test_sema_thread2isr(void)
 }
 
 /**
- *
+ * @brief Test k_sem_reset() API
  * @see k_sem_reset()
  */
 void test_sema_reset(void)
@@ -104,7 +104,7 @@ void test_sema_reset(void)
 }
 
 /**
- *
+ * @brief Test k_sem_count_get() API
  * @see k_sem_count_get()
  */
 void test_sema_count_get(void)
@@ -133,8 +133,7 @@ void test_sema_count_get(void)
 /*test case main entry*/
 void test_main(void)
 {
-	k_thread_access_grant(k_current_get(), &ksema, &tdata, &sema, &tstack,
-			      NULL);
+	k_thread_access_grant(k_current_get(), &ksema, &tdata, &sema, &tstack);
 
 	ztest_test_suite(sema_api,
 			 ztest_user_unit_test(test_sema_thread2thread),

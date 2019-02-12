@@ -12,8 +12,8 @@
  * included by the generic kernel interface header (arch/cpu.h)
  */
 
-#ifndef _RISCV32_ARCH_H_
-#define _RISCV32_ARCH_H_
+#ifndef ZEPHYR_INCLUDE_ARCH_RISCV32_ARCH_H_
+#define ZEPHYR_INCLUDE_ARCH_RISCV32_ARCH_H_
 
 #include "exp.h"
 #include "sys_io.h"
@@ -115,16 +115,21 @@ static ALWAYS_INLINE void _arch_irq_unlock(unsigned int key)
 			  : "memory");
 }
 
+/**
+ * @brief Explicitly nop operation.
+ */
+static ALWAYS_INLINE void arch_nop(void)
+{
+	__asm__ volatile("nop");
+}
+
+
 extern u32_t _timer_cycle_get_32(void);
 #define _arch_k_cycle_get_32()	_timer_cycle_get_32()
 
 #endif /*_ASMLANGUAGE */
 
-#if defined(CONFIG_SOC_RISCV32_PULPINO)
-#include <arch/riscv32/pulpino/asm_inline.h>
-#elif defined(CONFIG_SOC_RISCV32_QEMU)
-#include <arch/riscv32/riscv32-qemu/asm_inline.h>
-#elif defined(CONFIG_SOC_FAMILY_RISCV_PRIVILEGE)
+#if defined(CONFIG_SOC_FAMILY_RISCV_PRIVILEGE)
 #include <arch/riscv32/riscv-privilege/asm_inline.h>
 #endif
 

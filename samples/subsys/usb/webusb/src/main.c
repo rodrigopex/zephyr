@@ -13,8 +13,9 @@
  * the browser at host.
  */
 
-#define SYS_LOG_LEVEL SYS_LOG_LEVEL_DEBUG
-#include <logging/sys_log.h>
+#define LOG_LEVEL CONFIG_LOG_DEFAULT_LEVEL
+#include <logging/log.h>
+LOG_MODULE_REGISTER(main);
 
 #include <stdio.h>
 #include <string.h>
@@ -156,12 +157,22 @@ static const u8_t webusb_origin_url[] = {
  * Please note that this code only defines "extended compat ID OS feature
  * descriptors" and not "extended properties OS features descriptors"
  */
-static const u8_t msos1_string_descriptor[] = {
-	0x12, /* Descriptor size (18 bytes) */
-	0x03, /* Descriptor type (string)   */
-	'M',  0x00, 'S',  0x00, 'F',  0x00, 'T',  0x00, '1',  0x00, '0',  0x00, '0', 0x00,
-	0x03, /* Vendor-assigned bMS_VendorCode, used for a control request */
-	0x00, /* Padding byte, so bMS_VendorCode looks UTF16-compliant. */
+#define MSOS_STRING_LENGTH	18
+static struct string_desc {
+	u8_t bLength;
+	u8_t bDescriptorType;
+	u8_t bString[MSOS_STRING_LENGTH];
+
+} __packed msos1_string_descriptor = {
+	.bLength = MSOS_STRING_LENGTH,
+	.bDescriptorType = USB_STRING_DESC,
+	/* Signature MSFT100 */
+	.bString = {
+		'M', 0x00, 'S', 0x00, 'F', 0x00, 'T', 0x00,
+		'1', 0x00, '0', 0x00, '0', 0x00,
+		0x03, /* Vendor Code, used for a control request */
+		0x00, /* Padding byte for VendorCode looks like UTF16 */
+	},
 };
 
 static const u8_t msos1_compatid_descriptor[] = {
@@ -266,7 +277,7 @@ static struct webusb_req_handlers req_handlers = {
 
 void main(void)
 {
-	SYS_LOG_DBG("");
+	LOG_DBG("");
 
 	/* Set the custom and vendor request handlers */
 	webusb_register_request_handlers(&req_handlers);

@@ -22,26 +22,24 @@
 #define MB (1024 * 1024UL)
 #define GB (1024 * 1024 * 1024UL)
 
-/* default value setting for disabling interrupts */
-static unsigned int int_old_val = XIL_EXCEPTION_ALL;
-
-void sys_irq_restore_enable(void)
+void sys_irq_restore_enable(unsigned int flags)
 {
-	Xil_ExceptionEnableMask(~int_old_val);
+	Xil_ExceptionEnableMask(~flags);
 }
 
-void sys_irq_save_disable(void)
+unsigned int sys_irq_save_disable(void)
 {
-	int_old_val = mfcpsr() & XIL_EXCEPTION_ALL;
+	unsigned int state = mfcpsr() & XIL_EXCEPTION_ALL;
 
-	if (XIL_EXCEPTION_ALL != int_old_val) {
+	if (XIL_EXCEPTION_ALL != state) {
 		Xil_ExceptionDisableMask(XIL_EXCEPTION_ALL);
 	}
+	return state;
 }
 
 void metal_machine_cache_flush(void *addr, unsigned int len)
 {
-	if (!addr & !len)
+	if (!addr && !len)
 		Xil_DCacheFlush();
 	else
 		Xil_DCacheFlushRange((intptr_t)addr, len);
@@ -49,7 +47,7 @@ void metal_machine_cache_flush(void *addr, unsigned int len)
 
 void metal_machine_cache_invalidate(void *addr, unsigned int len)
 {
-	if (!addr & !len)
+	if (!addr && !len)
 		Xil_DCacheInvalidate();
 	else
 		Xil_DCacheInvalidateRange((intptr_t)addr, len);

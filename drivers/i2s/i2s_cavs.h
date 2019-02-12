@@ -12,8 +12,8 @@
  *   enabled) and "interrupt on full transfer completion" mode.
  */
 
-#ifndef _I2S_CAVS_H_
-#define _I2S_CAVS_H_
+#ifndef ZEPHYR_DRIVERS_I2S_I2S_CAVS_H_
+#define ZEPHYR_DRIVERS_I2S_I2S_CAVS_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -96,6 +96,7 @@ struct i2s_cavs_ssp {
 #define SSSR_TFS		(1 << 5)
 #define SSSR_RFS		(1 << 6)
 #define SSSR_ROR		(1 << 7)
+#define SSSR_TUR		(1 << 21)
 
 /* SSPSP bits */
 #define SSPSP_SCMODE(x)		((x) << 0)
@@ -143,4 +144,4 @@ struct i2s_cavs_mn_div {
 }
 #endif
 
-#endif /* _I2S_CAVS_H_ */
+#endif /* ZEPHYR_DRIVERS_I2S_I2S_CAVS_H_ */

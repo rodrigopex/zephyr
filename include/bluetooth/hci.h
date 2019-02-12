@@ -5,8 +5,8 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-#ifndef __BT_HCI_H
-#define __BT_HCI_H
+#ifndef ZEPHYR_INCLUDE_BLUETOOTH_HCI_H_
+#define ZEPHYR_INCLUDE_BLUETOOTH_HCI_H_
 
 #include <toolchain.h>
 #include <zephyr/types.h>
@@ -30,16 +30,20 @@ extern "C" {
 #define BT_HCI_OWN_ADDR_RPA_OR_PUBLIC  0x02
 #define BT_HCI_OWN_ADDR_RPA_OR_RANDOM  0x03
 
+/** Bluetooth Device Address */
 typedef struct {
 	u8_t  val[6];
 } bt_addr_t;
 
+/** Bluetooth LE Device Address */
 typedef struct {
 	u8_t      type;
 	bt_addr_t a;
 } bt_addr_le_t;
 
 #define BT_ADDR_ANY     (&(bt_addr_t) { { 0, 0, 0, 0, 0, 0 } })
+#define BT_ADDR_NONE    (&(bt_addr_t) { \
+			 { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } })
 #define BT_ADDR_LE_ANY  (&(bt_addr_le_t) { 0, { { 0, 0, 0, 0, 0, 0 } } })
 #define BT_ADDR_LE_NONE (&(bt_addr_le_t) { 0, \
 			 { { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } } })
@@ -93,6 +97,9 @@ static inline bool bt_addr_le_is_identity(const bt_addr_le_t *addr)
 	return BT_ADDR_IS_STATIC(&addr->a);
 }
 
+#define BT_ENC_KEY_SIZE_MIN                     0x07
+#define BT_ENC_KEY_SIZE_MAX                     0x10
+
 /* HCI Error Codes */
 #define BT_HCI_ERR_SUCCESS                      0x00
 #define BT_HCI_ERR_UNKNOWN_CMD                  0x01
@@ -121,9 +128,16 @@ static inline bool bt_addr_le_is_identity(const bt_addr_le_t *addr)
 #define BT_HCI_ERR_UNSUPP_REMOTE_FEATURE        0x1a
 #define BT_HCI_ERR_INVALID_LL_PARAM             0x1e
 #define BT_HCI_ERR_UNSPECIFIED                  0x1f
+#define BT_HCI_ERR_UNSUPP_LL_PARAM_VAL          0x20
+#define BT_HCI_ERR_LL_RESP_TIMEOUT              0x22
+#define BT_HCI_ERR_LL_PROC_COLLISION            0x23
+#define BT_HCI_ERR_INSTANT_PASSED               0x28
 #define BT_HCI_ERR_PAIRING_NOT_SUPPORTED        0x29
+#define BT_HCI_ERR_DIFF_TRANS_COLLISION         0x2a
 #define BT_HCI_ERR_UNACCEPT_CONN_PARAM          0x3b
 #define BT_HCI_ERR_ADV_TIMEOUT                  0x3c
+#define BT_HCI_ERR_TERM_DUE_TO_MIC_FAIL         0x3d
+#define BT_HCI_ERR_CONN_FAIL_TO_ESTAB           0x3e
 
 /* EIR/AD data type definitions */
 #define BT_DATA_FLAGS                   0x01 /* AD flags */
@@ -623,6 +637,7 @@ struct bt_hci_rp_write_auth_payload_timeout {
 #define BT_HCI_VERSION_4_1                      7
 #define BT_HCI_VERSION_4_2                      8
 #define BT_HCI_VERSION_5_0                      9
+#define BT_HCI_VERSION_5_1                      10
 
 #define BT_HCI_OP_READ_LOCAL_VERSION_INFO       BT_OP(BT_OGF_INFO, 0x0001)
 struct bt_hci_rp_read_local_version_info {
@@ -1893,4 +1908,4 @@ int bt_hci_cmd_send_sync(u16_t opcode, struct net_buf *buf,
 }
 #endif
 
-#endif /* __BT_HCI_H */
+#endif /* ZEPHYR_INCLUDE_BLUETOOTH_HCI_H_ */

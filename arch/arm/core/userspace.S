@@ -18,10 +18,14 @@ _ASM_FILE_PROLOGUE
 
 GTEXT(_arm_userspace_enter)
 GTEXT(_arm_do_syscall)
+GTEXT(z_arch_user_string_nlen)
+GTEXT(z_arch_user_string_nlen_fault_start)
+GTEXT(z_arch_user_string_nlen_fault_end)
+GTEXT(z_arch_user_string_nlen_fixup)
 GDATA(_kernel)
 
 /* Imports */
-GTEXT(_k_syscall_table)
+GDATA(_k_syscall_table)
 
 /**
  *
@@ -36,15 +40,40 @@ SECTION_FUNC(TEXT,_arm_userspace_enter)
     /* move user_entry to lr */
     mov lr, r0
 
-    /* set stack to priviliged stack */
+#if defined (CONFIG_ARM_MPU)
+    /* Re-program dynamic memory map */
+    push {r1,r2,r3,ip,lr}
+    ldr r0, =_kernel
+    ldr r0, [r0, #_kernel_offset_to_current]
+    bl _arch_configure_dynamic_mpu_regions
+    pop {r1,r2,r3,ip,lr}
+#endif
+
+    /* set stack to privileged stack */
     ldr r0, =_kernel
     ldr r0, [r0, #_kernel_offset_to_current]
     ldr r0, [r0, #_thread_offset_to_priv_stack_start]    /* priv stack ptr */
     ldr ip, =CONFIG_PRIVILEGED_STACK_SIZE
     add r0, r0, ip
 
+#if defined(CONFIG_BUILTIN_STACK_GUARD)
+    /* clear stack pointer limit before setting the PSP */
+    push {r3}
+    mov r3, #0
+    msr PSPLIM, r3
+    pop {r3}
+#endif
+
     mov ip, sp
     msr PSP, r0
+
+#if defined(CONFIG_BUILTIN_STACK_GUARD)
+    /* set stack pointer limit to the start of the priv stack */
+    ldr r0, =_kernel
+    ldr r0, [r0, #_kernel_offset_to_current]
+    ldr r0, [r0, #_thread_offset_to_priv_stack_start]    /* priv stack ptr */
+    msr PSPLIM, r0
+#endif
 
     /* load up stack info from user stack */
     ldr r0, [ip]
@@ -68,26 +97,38 @@ SECTION_FUNC(TEXT,_arm_userspace_enter)
 #endif
     bl memset
 
-    /* setup arguments to configure_mpu_mem_domain */
-    ldr r0, =_kernel
-    ldr r0, [r0, #_kernel_offset_to_current]
-    bl configure_mpu_mem_domain
-
-    /* setup arguments configure_mpu_user_context */
-    ldr r0, =_kernel
-    ldr r0, [r0, #_kernel_offset_to_current]
-    bl configure_mpu_user_context
-
     pop {r0,r1,r2,r3,ip,lr}
 
     /* r0 contains user stack start, ip contains user stack size */
     add r0, r0, ip   /* calculate top of stack */
+
+#if defined(CONFIG_BUILTIN_STACK_GUARD)
+    /* clear stack limit (stack protection not required in user mode) */
+    push {r3}
+    mov r3, #0
+    msr PSPLIM, r3
+    pop {r3}
+#endif
 
     /* set stack to user stack */
     msr PSP, r0
 
     /* restore r0 */
     mov r0, lr
+
+#ifdef CONFIG_EXECUTION_BENCHMARKING
+    stm sp!,{r0-r3} /* Save regs r0 to r4 on stack */
+    push {r0, lr}
+    bl read_timer_end_of_userspace_enter
+#if defined(CONFIG_ARMV6_M_ARMV8_M_BASELINE)
+    pop {r0, r3}
+    mov lr,r3
+#else
+    pop {r0, lr}
+#endif /* CONFIG_ARMV6_M_ARMV8_M_BASELINE */
+    ldm sp!,{r0-r3} /* Restore r0 to r3 regs */
+
+#endif /* CONFIG_EXECUTION_BENCHMARKING */
 
     /* change processor mode to unprivileged */
     mrs ip, CONTROL
@@ -122,7 +163,7 @@ SECTION_FUNC(TEXT, _arm_do_syscall)
      * r6 contains call_id
      * r8 contains original LR
      */
-    ldr ip, =_SYSCALL_BAD
+    ldr ip, =K_SYSCALL_BAD
     cmp r6, ip
     bne valid_syscall
 
@@ -133,7 +174,7 @@ SECTION_FUNC(TEXT, _arm_do_syscall)
     b dispatch_syscall
 
 valid_syscall:
-    /* setup priviliged stack */
+    /* setup privileged stack */
     push {r6}
     ldr r6, =_kernel
     ldr r6, [r6, #_kernel_offset_to_current]
@@ -148,6 +189,16 @@ valid_syscall:
     /* switch to privileged stack */
     msr PSP, ip
 
+#if defined(CONFIG_BUILTIN_STACK_GUARD)
+    /* Set stack pointer limit (needed in privileged mode) */
+    push {r6}
+    ldr r6, =_kernel
+    ldr r6, [r6, #_kernel_offset_to_current]
+    ldr r6, [r6, #_thread_offset_to_priv_stack_start]    /* priv stack ptr */
+    msr PSPLIM, r6
+    pop {r6}
+#endif
+
     /* push args to complete stack frame */
     push {r4,r5}
 
@@ -161,6 +212,14 @@ dispatch_syscall:
 
     /* restore LR */
     ldr lr, [sp,#12]
+
+#if defined(CONFIG_BUILTIN_STACK_GUARD)
+    /* clear stack limit (stack protection not required in user mode) */
+    push {r3}
+    mov r3, #0
+    msr PSPLIM, r3
+    pop {r3}
+#endif
 
     /* set stack back to unprivileged stack */
     ldr ip, [sp,#8]
@@ -192,3 +251,47 @@ dispatch_syscall:
     mov ip, r8
     orrs ip, ip, #1
     bx ip
+
+
+/*
+ * size_t z_arch_user_string_nlen(const char *s, size_t maxsize, int *err_arg)
+ */
+SECTION_FUNC(TEXT, z_arch_user_string_nlen)
+    push {r0, r1, r2, r4, r5, lr}
+
+    /* sp+4 is error value, init to -1 */
+    mov.w r3, #-1
+    str	r3, [sp, #4]
+
+    /* Perform string length calculation */
+    movs r3, #0		/* r3 is the counter */
+
+strlen_loop:
+z_arch_user_string_nlen_fault_start:
+    /* r0 contains the string. r5 = *(r0 + r3]). This could fault. */
+    ldrb r5, [r0, r3]
+
+z_arch_user_string_nlen_fault_end:
+    cbz	r5, strlen_done
+    cmp	r3, r1
+    beq.n strlen_done
+
+    adds r3, #1
+    b.n	strlen_loop
+
+strlen_done:
+    /* Move length calculation from r3 to r0 (return value register) */
+    mov	r0, r3
+
+    /* Clear error value since we succeeded */
+    movs r1, #0
+    str	r1, [sp, #4]
+
+z_arch_user_string_nlen_fixup:
+    /* Write error value to err pointer parameter */
+    ldr	r1, [sp, #4]
+    str	r1, [r2, #0]
+
+    add	sp, #12
+    pop	{r4, r5, pc}
+

@@ -10,7 +10,7 @@
 #define TIMEOUT 100
 #define STACK_LEN 2
 
-static u32_t data[STACK_LEN];
+static ZTEST_BMEM u32_t data[STACK_LEN];
 extern struct k_stack stack;
 
 static void stack_pop_fail(struct k_stack *stack)
@@ -29,6 +29,7 @@ static void stack_pop_fail(struct k_stack *stack)
  */
 
 /**
+ * @brief Verifies stack pop functionality
  * @see k_stack_init(), k_stack_pop()
  */
 void test_stack_pop_fail(void)
@@ -40,6 +41,7 @@ void test_stack_pop_fail(void)
 
 #ifdef CONFIG_USERSPACE
 /**
+ * @brief Verifies stack pop from a user thread
  * @see k_stack_init(), k_stack_pop()
  */
 void test_stack_user_pop_fail(void)

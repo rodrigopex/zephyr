@@ -10,11 +10,12 @@
 #include <zephyr.h>
 #include <ztest.h>
 
-#if defined(CONFIG_RISCV32) || defined(CONFIG_X86)
-#define STACK_SIZE 512
-#else
-#define STACK_SIZE (256 + CONFIG_TEST_EXTRA_STACKSIZE)
-#endif
+#define MAX_NUM_THREAD 10
+#define STACK_SIZE (640 + CONFIG_TEST_EXTRA_STACKSIZE)
+
+K_THREAD_STACK_EXTERN(tstack);
+extern k_thread_stack_t
+	tstacks[MAX_NUM_THREAD][K_THREAD_STACK_LEN(STACK_SIZE)];
 
 struct thread_data {
 	k_tid_t tid;
@@ -36,5 +37,6 @@ void test_sched_is_preempt_thread(void);
 void test_slice_reset(void);
 void test_slice_scheduling(void);
 void test_priority_scheduling(void);
+void test_wakeup_expired_timer_thread(void);
 
 #endif /* __TEST_SCHED_H__ */

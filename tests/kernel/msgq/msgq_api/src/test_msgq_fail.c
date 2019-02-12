@@ -5,8 +5,8 @@
  */
 #include "test_msgq.h"
 
-static char __aligned(4) tbuffer[MSG_SIZE * MSGQ_LEN];
-static u32_t data[MSGQ_LEN] = { MSG0, MSG1 };
+static ZTEST_BMEM char __aligned(4) tbuffer[MSG_SIZE * MSGQ_LEN];
+static ZTEST_DMEM u32_t data[MSGQ_LEN] = { MSG0, MSG1 };
 extern struct k_msgq msgq;
 
 static void put_fail(struct k_msgq *q)
@@ -45,6 +45,7 @@ static void get_fail(struct k_msgq *q)
  */
 
 /**
+ * @brief Test returned error code during writing in msgq
  * @see k_msgq_init()
  */
 void test_msgq_put_fail(void)
@@ -55,6 +56,7 @@ void test_msgq_put_fail(void)
 
 #ifdef CONFIG_USERSPACE
 /**
+ * @brief Test returned error code during writing in msgq
  * @see k_msgq_alloc_init()
  */
 void test_msgq_user_put_fail(void)
@@ -69,6 +71,7 @@ void test_msgq_user_put_fail(void)
 #endif /* CONFIG_USERSPACE */
 
 /**
+ * @brief Test returned error code during reading from msgq
  * @see k_msgq_init(), k_msgq_put()
  */
 void test_msgq_get_fail(void)
@@ -79,6 +82,7 @@ void test_msgq_get_fail(void)
 
 #ifdef CONFIG_USERSPACE
 /**
+ * @brief Test returned error code during reading from msgq
  * @see k_msgq_alloc_init(), k_msgq_get()
  */
 void test_msgq_user_get_fail(void)

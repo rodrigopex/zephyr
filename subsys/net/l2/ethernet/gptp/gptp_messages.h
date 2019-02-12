@@ -25,7 +25,7 @@ extern "C" {
 #include <net/gptp.h>
 
 /* Helpers to access gPTP messages. */
-#define GPTP_HDR(pkt) ((struct gptp_hdr *)net_pkt_ip_data(pkt))
+#define GPTP_HDR(pkt) gptp_get_hdr(pkt)
 #define GPTP_ANNOUNCE(pkt) ((struct gptp_announce *)gptp_data(pkt))
 #define GPTP_SIGNALING(pkt) ((struct gptp_signaling *)gptp_data(pkt))
 #define GPTP_SYNC(pkt) ((struct gptp_sync *)gptp_data(pkt))
@@ -190,13 +190,15 @@ struct gptp_sync {
 	u8_t reserved[10];
 } __packed;
 
-struct gptp_follow_up_tlv {
+struct gptp_follow_up_tlv_hdr {
 	/** TLV type: 0x3. */
 	u16_t type;
 
 	/** Length: 28. */
 	u16_t len;
+} __packed;
 
+struct gptp_follow_up_tlv {
 	/** Organization Id: 00-80-C2. */
 	u8_t org_id[3];
 
@@ -227,6 +229,7 @@ struct gptp_follow_up {
 	u32_t prec_orig_ts_nsecs;
 
 	/** Follow up TLV. */
+	struct gptp_follow_up_tlv_hdr tlv_hdr;
 	struct gptp_follow_up_tlv tlv;
 } __packed;
 
@@ -317,7 +320,7 @@ struct gptp_signaling {
  */
 static inline u8_t *gptp_data(struct net_pkt *pkt)
 {
-	return &pkt->frags->data[sizeof(struct gptp_hdr)];
+	return (u8_t *)GPTP_HDR(pkt) + sizeof(struct gptp_hdr);
 }
 
 /* Functions to prepare messages. */

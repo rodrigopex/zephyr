@@ -760,7 +760,7 @@ void HAL_QSPI_IRQHandler(QSPI_HandleTypeDef *hqspi)
 
         /* Change state of QSPI */
         hqspi->State = HAL_QSPI_STATE_READY;
-        
+
         /* Error callback */
 #if (USE_HAL_QSPI_REGISTER_CALLBACKS == 1)
         hqspi->ErrorCallback(hqspi);
@@ -1399,10 +1399,10 @@ HAL_StatusTypeDef HAL_QSPI_Transmit_DMA(QSPI_HandleTypeDef *hqspi, uint8_t *pDat
         {
           /* Process unlocked */
           __HAL_UNLOCK(hqspi);
-          
+
           /* Enable the QSPI transfer error Interrupt */
           __HAL_QSPI_ENABLE_IT(hqspi, QSPI_IT_TE);
-          
+
           /* Enable the DMA transfer by setting the DMAEN bit in the QSPI CR register */
           SET_BIT(hqspi->Instance->CR, QUADSPI_CR_DMAEN);
         }
@@ -1547,10 +1547,10 @@ HAL_StatusTypeDef HAL_QSPI_Receive_DMA(QSPI_HandleTypeDef *hqspi, uint8_t *pData
 
           /* Process unlocked */
           __HAL_UNLOCK(hqspi);
-          
+
           /* Enable the QSPI transfer error Interrupt */
           __HAL_QSPI_ENABLE_IT(hqspi, QSPI_IT_TE);
-          
+
           /* Enable the DMA transfer by setting the DMAEN bit in the QSPI CR register */
           SET_BIT(hqspi->Instance->CR, QUADSPI_CR_DMAEN);
         }
@@ -2033,7 +2033,7 @@ __weak void HAL_QSPI_TimeOutCallback(QSPI_HandleTypeDef *hqspi)
   * @brief  Register a User QSPI Callback
   *         To be used instead of the weak (surcharged) predefined callback
   * @param hqspi : QSPI handle
-  * @param CallbackID : ID of the callback to be registered
+  * @param CallbackId : ID of the callback to be registered
   *        This parameter can be one of the following values:
   *          @arg @ref HAL_QSPI_ERROR_CB_ID          QSPI Error Callback ID
   *          @arg @ref HAL_QSPI_ABORT_CB_ID          QSPI Abort Callback ID
@@ -2050,7 +2050,7 @@ __weak void HAL_QSPI_TimeOutCallback(QSPI_HandleTypeDef *hqspi)
   * @param pCallback : pointer to the Callback function
   * @retval status
   */
-HAL_StatusTypeDef HAL_QSPI_RegisterCallback (QSPI_HandleTypeDef *hqspi, HAL_QSPI_CallbackIDTypeDef CallbackID, pQSPI_CallbackTypeDef pCallback)
+HAL_StatusTypeDef HAL_QSPI_RegisterCallback (QSPI_HandleTypeDef *hqspi, HAL_QSPI_CallbackIDTypeDef CallbackId, pQSPI_CallbackTypeDef pCallback)
 {
   HAL_StatusTypeDef status = HAL_OK;
 
@@ -2066,7 +2066,7 @@ HAL_StatusTypeDef HAL_QSPI_RegisterCallback (QSPI_HandleTypeDef *hqspi, HAL_QSPI
 
   if(hqspi->State == HAL_QSPI_STATE_READY)
   {
-    switch (CallbackID)
+    switch (CallbackId)
     {
     case  HAL_QSPI_ERROR_CB_ID :
       hqspi->ErrorCallback = pCallback;
@@ -2114,7 +2114,7 @@ HAL_StatusTypeDef HAL_QSPI_RegisterCallback (QSPI_HandleTypeDef *hqspi, HAL_QSPI
   }
   else if (hqspi->State == HAL_QSPI_STATE_RESET)
   {
-    switch (CallbackID)
+    switch (CallbackId)
     {
     case HAL_QSPI_MSP_INIT_CB_ID :
       hqspi->MspInitCallback = pCallback;
@@ -2147,7 +2147,7 @@ HAL_StatusTypeDef HAL_QSPI_RegisterCallback (QSPI_HandleTypeDef *hqspi, HAL_QSPI
   * @brief  Unregister a User QSPI Callback
   *         QSPI Callback is redirected to the weak (surcharged) predefined callback
   * @param hqspi : QSPI handle
-  * @param CallbackID : ID of the callback to be unregistered
+  * @param CallbackId : ID of the callback to be unregistered
   *        This parameter can be one of the following values:
   *          @arg @ref HAL_QSPI_ERROR_CB_ID          QSPI Error Callback ID
   *          @arg @ref HAL_QSPI_ABORT_CB_ID          QSPI Abort Callback ID
@@ -2163,7 +2163,7 @@ HAL_StatusTypeDef HAL_QSPI_RegisterCallback (QSPI_HandleTypeDef *hqspi, HAL_QSPI
   *          @arg @ref HAL_QSPI_MSP_DEINIT_CB_ID     QSPI MspDeInit callback ID
   * @retval status
   */
-HAL_StatusTypeDef HAL_QSPI_UnRegisterCallback (QSPI_HandleTypeDef *hqspi, HAL_QSPI_CallbackIDTypeDef CallbackID)
+HAL_StatusTypeDef HAL_QSPI_UnRegisterCallback (QSPI_HandleTypeDef *hqspi, HAL_QSPI_CallbackIDTypeDef CallbackId)
 {
   HAL_StatusTypeDef status = HAL_OK;
 
@@ -2172,7 +2172,7 @@ HAL_StatusTypeDef HAL_QSPI_UnRegisterCallback (QSPI_HandleTypeDef *hqspi, HAL_QS
 
   if(hqspi->State == HAL_QSPI_STATE_READY)
   {
-    switch (CallbackID)
+    switch (CallbackId)
     {
     case  HAL_QSPI_ERROR_CB_ID :
       hqspi->ErrorCallback = HAL_QSPI_ErrorCallback;
@@ -2220,7 +2220,7 @@ HAL_StatusTypeDef HAL_QSPI_UnRegisterCallback (QSPI_HandleTypeDef *hqspi, HAL_QS
   }
   else if (hqspi->State == HAL_QSPI_STATE_RESET)
   {
-    switch (CallbackID)
+    switch (CallbackId)
     {
     case HAL_QSPI_MSP_INIT_CB_ID :
       hqspi->MspInitCallback = HAL_QSPI_MspInit;
@@ -2381,7 +2381,7 @@ HAL_StatusTypeDef HAL_QSPI_Abort_IT(QSPI_HandleTypeDef *hqspi)
       {
         /* Change state of QSPI */
         hqspi->State = HAL_QSPI_STATE_READY;
-        
+
         /* Abort Complete callback */
 #if (USE_HAL_QSPI_REGISTER_CALLBACKS == 1)
         hqspi->AbortCpltCallback(hqspi);
@@ -2585,21 +2585,8 @@ static void QSPI_DMAError(DMA_HandleTypeDef *hdma)
   CLEAR_BIT(hqspi->Instance->CR, QUADSPI_CR_DMAEN);
 
   /* Abort the QSPI */
-  if (HAL_QSPI_Abort_IT(hqspi) != HAL_OK)
-  {
-    /* Disable the QSPI FIFO Threshold, Transfer Error and Transfer complete Interrupts */
-    __HAL_QSPI_DISABLE_IT(hqspi, QSPI_IT_TC | QSPI_IT_TE | QSPI_IT_FT);
+  (void)HAL_QSPI_Abort_IT(hqspi);
 
-    /* Change state of QSPI */
-    hqspi->State = HAL_QSPI_STATE_READY;
-    
-    /* Error callback */
-#if (USE_HAL_QSPI_REGISTER_CALLBACKS == 1)
-    hqspi->ErrorCallback(hqspi);
-#else
-    HAL_QSPI_ErrorCallback(hqspi);
-#endif
-  }
 }
 
 /**

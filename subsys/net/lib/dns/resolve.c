@@ -10,10 +10,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#if defined(CONFIG_NET_DEBUG_DNS_RESOLVE)
-#define SYS_LOG_DOMAIN "dns/resolve"
-#define NET_LOG_ENABLED 1
-#endif
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_dns_resolve, CONFIG_DNS_RESOLVER_LOG_LEVEL);
 
 #include <zephyr/types.h>
 #include <string.h>
@@ -84,7 +82,7 @@ static struct dns_resolve_context dns_default_ctx;
 static bool server_is_mdns(sa_family_t family, struct sockaddr *addr)
 {
 	if (family == AF_INET) {
-		if (net_is_ipv4_addr_mcast(&net_sin(addr)->sin_addr) &&
+		if (net_ipv4_is_addr_mcast(&net_sin(addr)->sin_addr) &&
 		    net_sin(addr)->sin_addr.s4_addr[3] == 251) {
 			return true;
 		}
@@ -93,7 +91,7 @@ static bool server_is_mdns(sa_family_t family, struct sockaddr *addr)
 	}
 
 	if (family == AF_INET6) {
-		if (net_is_ipv6_addr_mcast(&net_sin6(addr)->sin6_addr) &&
+		if (net_ipv6_is_addr_mcast(&net_sin6(addr)->sin6_addr) &&
 		    net_sin6(addr)->sin6_addr.s6_addr[15] == 0xfb) {
 			return true;
 		}
@@ -107,7 +105,7 @@ static bool server_is_mdns(sa_family_t family, struct sockaddr *addr)
 static bool server_is_llmnr(sa_family_t family, struct sockaddr *addr)
 {
 	if (family == AF_INET) {
-		if (net_is_ipv4_addr_mcast(&net_sin(addr)->sin_addr) &&
+		if (net_ipv4_is_addr_mcast(&net_sin(addr)->sin_addr) &&
 		    net_sin(addr)->sin_addr.s4_addr[3] == 252) {
 			return true;
 		}
@@ -116,7 +114,7 @@ static bool server_is_llmnr(sa_family_t family, struct sockaddr *addr)
 	}
 
 	if (family == AF_INET6) {
-		if (net_is_ipv6_addr_mcast(&net_sin6(addr)->sin6_addr) &&
+		if (net_ipv6_is_addr_mcast(&net_sin6(addr)->sin6_addr) &&
 		    net_sin6(addr)->sin6_addr.s6_addr[15] == 0x03) {
 			return true;
 		}
@@ -208,13 +206,13 @@ int dns_resolve_init(struct dns_resolve_context *ctx, const char *servers[],
 		return -ENOTEMPTY;
 	}
 
-	memset(ctx, 0, sizeof(*ctx));
+	(void)memset(ctx, 0, sizeof(*ctx));
 
 	if (servers) {
 		for (i = 0; idx < SERVER_COUNT && servers[i]; i++) {
 			struct sockaddr *addr = &ctx->servers[idx].dns_server;
 
-			memset(addr, 0, sizeof(*addr));
+			(void)memset(addr, 0, sizeof(*addr));
 
 			ret = net_ipaddr_parse(servers[i], strlen(servers[i]),
 					       addr);
@@ -224,7 +222,7 @@ int dns_resolve_init(struct dns_resolve_context *ctx, const char *servers[],
 
 			dns_postprocess_server(ctx, idx);
 
-			NET_DBG("[%d] %s", i, servers[i]);
+			NET_DBG("[%d] %s", i, log_strdup(servers[i]));
 
 			idx++;
 		}
@@ -514,13 +512,15 @@ quit:
 
 static void cb_recv(struct net_context *net_ctx,
 		    struct net_pkt *pkt,
+		    union net_ip_header *ip_hdr,
+		    union net_proto_header *proto_hdr,
 		    int status,
 		    void *user_data)
 {
 	struct dns_resolve_context *ctx = user_data;
 	struct net_buf *dns_cname = NULL;
 	struct net_buf *dns_data = NULL;
-	u16_t dns_id = 0;
+	u16_t dns_id = 0U;
 	int ret, i;
 
 	ARG_UNUSED(net_ctx);
@@ -657,7 +657,7 @@ static int dns_write(struct dns_resolve_context *ctx,
 	}
 
 	ret = net_pkt_append_all(pkt, dns_data->len, dns_data->data,
-			      ctx->buf_timeout);
+				 ctx->buf_timeout);
 	if (ret < 0) {
 		ret = -ENOMEM;
 		goto quit;
@@ -855,7 +855,7 @@ try_resolve:
 	}
 
 	for (j = 0; j < SERVER_COUNT; j++) {
-		hop_limit = 0;
+		hop_limit = 0U;
 
 		if (!ctx->servers[j].net_ctx) {
 			continue;
@@ -877,7 +877,7 @@ try_resolve:
 				continue;
 			}
 
-			hop_limit = 1;
+			hop_limit = 1U;
 		}
 
 		ret = dns_write(ctx, j, i, dns_data, dns_qname, hop_limit);
@@ -916,7 +916,7 @@ quit:
 		}
 
 		if (dns_id) {
-			*dns_id = 0;
+			*dns_id = 0U;
 		}
 	}
 

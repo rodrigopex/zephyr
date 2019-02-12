@@ -11,15 +11,15 @@
  * ARM-specific kernel exception handling interface. Included by arm/arch.h.
  */
 
-#ifndef _ARCH_ARM_CORTEXM_EXC_H_
-#define _ARCH_ARM_CORTEXM_EXC_H_
+#ifndef ZEPHYR_INCLUDE_ARCH_ARM_CORTEX_M_EXC_H_
+#define ZEPHYR_INCLUDE_ARCH_ARM_CORTEX_M_EXC_H_
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* for assembler, only works with constants */
-#define _EXC_PRIO(pri) (((pri) << (8 - CONFIG_NUM_IRQ_PRIO_BITS)) & 0xff)
+#define _EXC_PRIO(pri) (((pri) << (8 - DT_NUM_IRQ_PRIO_BITS)) & 0xff)
 
 #if defined(CONFIG_CPU_CORTEX_M_HAS_PROGRAMMABLE_FAULT_PRIOS)
 #define _EXCEPTION_RESERVED_PRIO 1
@@ -78,4 +78,4 @@ extern void sys_exc_esf_dump(NANO_ESF *esf);
 }
 #endif
 
-#endif /* _ARCH_ARM_CORTEXM_EXC_H_ */
+#endif /* ZEPHYR_INCLUDE_ARCH_ARM_CORTEX_M_EXC_H_ */

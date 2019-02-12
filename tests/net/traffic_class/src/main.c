@@ -6,6 +6,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#define NET_LOG_LEVEL CONFIG_NET_TC_LOG_LEVEL
+
+#include <logging/log.h>
+LOG_MODULE_REGISTER(net_test, NET_LOG_LEVEL);
+
 #include <zephyr/types.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -17,6 +22,7 @@
 #include <ztest.h>
 
 #include <net/ethernet.h>
+#include <net/dummy.h>
 #include <net/buf.h>
 #include <net/net_ip.h>
 #include <net/net_l2.h>
@@ -27,7 +33,7 @@
 #define NET_LOG_ENABLED 1
 #include "net_private.h"
 
-#if defined(CONFIG_NET_DEBUG_L2_ETHERNET)
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 #define DBG(fmt, ...) printk(fmt, ##__VA_ARGS__)
 #else
 #define DBG(fmt, ...)
@@ -148,7 +154,7 @@ static bool check_higher_priority_pkt_recv(int tc, struct net_pkt *pkt)
 /* The eth_tx() will handle both sent packets or and it will also
  * simulate the receiving of the packets.
  */
-static int eth_tx(struct net_if *iface, struct net_pkt *pkt)
+static int eth_tx(struct device *dev, struct net_pkt *pkt)
 {
 	if (!pkt->frags) {
 		DBG("No data to send!\n");
@@ -177,7 +183,8 @@ static int eth_tx(struct net_if *iface, struct net_pkt *pkt)
 		udp_hdr->src_port = udp_hdr->dst_port;
 		udp_hdr->dst_port = port;
 
-		if (net_recv_data(net_pkt_iface(pkt), pkt) < 0) {
+		if (net_recv_data(net_pkt_iface(pkt),
+				  net_pkt_clone(pkt, K_NO_WAIT)) < 0) {
 			test_failed = true;
 			zassert_true(false, "Packet %p receive failed\n", pkt);
 		}
@@ -186,7 +193,7 @@ static int eth_tx(struct net_if *iface, struct net_pkt *pkt)
 	}
 
 	if (test_started) {
-#if defined(CONFIG_NET_DEBUG_L2_ETHERNET)
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 		k_tid_t thread = k_current_get();
 #endif
 		int i, prio, ret;
@@ -226,13 +233,11 @@ static int eth_tx(struct net_if *iface, struct net_pkt *pkt)
 	}
 
 fail:
-	net_pkt_unref(pkt);
-
 	return 0;
 }
 
-static struct net_if_api api_funcs = {
-	.init	= eth_iface_init,
+static struct dummy_api api_funcs = {
+	.iface_api.init	= eth_iface_init,
 	.send	= eth_tx,
 };
 
@@ -567,7 +572,7 @@ static void traffic_class_send_data_mix(void)
 	 */
 	int total_packets = 0;
 
-	memset(send_priorities, 0, sizeof(send_priorities));
+	(void)memset(send_priorities, 0, sizeof(send_priorities));
 
 	traffic_class_send_priority(NET_PRIORITY_BK, MAX_PKT_TO_SEND, false);
 	total_packets += MAX_PKT_TO_SEND;
@@ -590,7 +595,7 @@ static void traffic_class_send_data_mix_all_1(void)
 {
 	int total_packets = 0;
 
-	memset(send_priorities, 0, sizeof(send_priorities));
+	(void)memset(send_priorities, 0, sizeof(send_priorities));
 
 	traffic_class_send_priority(NET_PRIORITY_BK, MAX_PKT_TO_SEND, false);
 	total_packets += MAX_PKT_TO_SEND;
@@ -635,7 +640,7 @@ static void traffic_class_send_data_mix_all_2(void)
 	int total_packets = 0;
 	int i;
 
-	memset(send_priorities, 0, sizeof(send_priorities));
+	(void)memset(send_priorities, 0, sizeof(send_priorities));
 
 	/* In this test send one packet for each queue instead of sending
 	 * n packets to same queue at a time.
@@ -679,10 +684,12 @@ static void traffic_class_send_data_mix_all_2(void)
 
 static void recv_cb(struct net_context *context,
 		    struct net_pkt *pkt,
+		    union net_ip_header *ip_hdr,
+		    union net_proto_header *proto_hdr,
 		    int status,
 		    void *user_data)
 {
-#if defined(CONFIG_NET_DEBUG_L2_ETHERNET)
+#if NET_LOG_LEVEL >= LOG_LEVEL_DBG
 	k_tid_t thread = k_current_get();
 #endif
 	int i, prio, ret;
@@ -876,7 +883,7 @@ static void traffic_class_recv_data_mix(void)
 	 */
 	int total_packets = 0;
 
-	memset(recv_priorities, 0, sizeof(recv_priorities));
+	(void)memset(recv_priorities, 0, sizeof(recv_priorities));
 
 	traffic_class_recv_priority(NET_PRIORITY_BK, MAX_PKT_TO_RECV, false);
 	total_packets += MAX_PKT_TO_RECV;
@@ -899,7 +906,7 @@ static void traffic_class_recv_data_mix_all_1(void)
 {
 	int total_packets = 0;
 
-	memset(recv_priorities, 0, sizeof(recv_priorities));
+	(void)memset(recv_priorities, 0, sizeof(recv_priorities));
 
 	traffic_class_recv_priority(NET_PRIORITY_BK, MAX_PKT_TO_RECV, false);
 	total_packets += MAX_PKT_TO_RECV;
@@ -944,7 +951,7 @@ static void traffic_class_recv_data_mix_all_2(void)
 	int total_packets = 0;
 	int i;
 
-	memset(recv_priorities, 0, sizeof(recv_priorities));
+	(void)memset(recv_priorities, 0, sizeof(recv_priorities));
 
 	/* In this test receive one packet for each queue instead of receiving
 	 * n packets to same queue at a time.

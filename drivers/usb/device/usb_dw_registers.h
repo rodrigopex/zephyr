@@ -12,11 +12,10 @@
  * definitions.
  */
 
-#ifndef __USB_DW_REGISTERS_H__
-#define __USB_DW_REGISTERS_H__
+#ifndef ZEPHYR_DRIVERS_USB_DEVICE_USB_DW_REGISTERS_H_
+#define ZEPHYR_DRIVERS_USB_DEVICE_USB_DW_REGISTERS_H_
 
 #include <misc/util.h>
-#include <board.h>
 
 #if defined(CONFIG_SOC_QUARK_SE_C1000)
 #include "qm_soc_regs.h"
@@ -214,4 +213,4 @@ struct usb_dw_reg {
 }
 #endif
 
-#endif /* __USB_DW_REGISTERS_H__ */
+#endif /* ZEPHYR_DRIVERS_USB_DEVICE_USB_DW_REGISTERS_H_ */

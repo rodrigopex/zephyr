@@ -28,14 +28,14 @@ extern "C" {
  * This structure applies for MDSyncReceive as well as MDSyncSend.
  */
 struct gptp_mi_port_sync_sync {
-	/** Port to which the Sync Information belongs to. */
-	u16_t local_port_number;
-
 	/** Time at which the sync receipt timeout occurs. */
 	u64_t sync_receipt_timeout_time;
 
 	/** Copy of the gptp_md_sync_info to be transmitted. */
 	struct gptp_md_sync_info sync_info;
+
+	/** Port to which the Sync Information belongs to. */
+	u16_t local_port_number;
 };
 
 /**
@@ -61,6 +61,15 @@ void gptp_mi_port_bmca_state_machines(int port);
  * @brief Run all Media Independent State Machines.
  */
 void gptp_mi_state_machines(void);
+
+/**
+ * @brief Return current time in nanoseconds.
+ *
+ * @param port Port number of the clock to use.
+ *
+ * @return Current time in nanoseconds.
+ */
+u64_t gptp_get_current_time_nanosecond(int port);
 
 #endif /* CONFIG_NET_GPTP */
 

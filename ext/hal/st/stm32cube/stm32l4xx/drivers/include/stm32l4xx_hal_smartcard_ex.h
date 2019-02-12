@@ -34,8 +34,8 @@
   */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __STM32L4xx_HAL_SMARTCARD_EX_H
-#define __STM32L4xx_HAL_SMARTCARD_EX_H
+#ifndef STM32L4xx_HAL_SMARTCARD_EX_H
+#define STM32L4xx_HAL_SMARTCARD_EX_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -265,7 +265,7 @@ extern "C" {
 #define SMARTCARD_TRANSMISSION_COMPLETION_SETTING(__HANDLE__)         \
   do {                                                                \
     (__HANDLE__)->AdvancedInit.TxCompletionIndication = SMARTCARD_TC; \
-  } while(0U)  
+  } while(0U)
 #endif /* USART_TCBGT_SUPPORT */
 
 /** @brief  Return the transmission completion flag.
@@ -403,6 +403,6 @@ HAL_StatusTypeDef HAL_SMARTCARDEx_SetRxFifoThreshold(SMARTCARD_HandleTypeDef *hs
 }
 #endif
 
-#endif /* __STM32L4xx_HAL_SMARTCARD_EX_H */
+#endif /* STM32L4xx_HAL_SMARTCARD_EX_H */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

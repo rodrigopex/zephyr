@@ -27,8 +27,6 @@ source "drivers/timer/Kconfig"
 
 source "drivers/entropy/Kconfig"
 
-source "drivers/grove/Kconfig"
-
 source "drivers/pci/Kconfig"
 
 source "drivers/gpio/Kconfig"
@@ -80,5 +78,13 @@ source "drivers/wifi/Kconfig"
 source "drivers/led/Kconfig"
 
 source "drivers/can/Kconfig"
+
+source "drivers/modem/Kconfig"
+
+source "drivers/audio/Kconfig"
+
+source "drivers/neural_net/Kconfig"
+
+source "drivers/hwinfo/Kconfig"
 
 endmenu

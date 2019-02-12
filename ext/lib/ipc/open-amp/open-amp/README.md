@@ -130,10 +130,10 @@ directory.
     ```
     # Start echo test server to wait for message to echo
     $ sudo LD_LIBRARY_PATH=<openamp_built>/usr/local/lib:<libmetal_built>/usr/local/lib \
-       build/usr/local/bin/echo_testd-shared
+       build/usr/local/bin/rpmsg-echo-shared
     # Run echo test to send message to echo test server
     $ sudo LD_LIBRARY_PATH=<openamp_built>/usr/local/lib:<libmetal_built>/usr/local/lib \
-       build/usr/local/bin/echo_test-shared 1
+       build/usr/local/bin/rpmsg-echo-ping-shared 1
     ```
 
 ###  Example to compile Zynq UltraScale+ MPSoC R5 generic(baremetal) remote:
@@ -233,15 +233,9 @@ For now, it supports:
 * Linux userspace OpenAMP RPMsg slave
 
 ## Known Limitations:
-1. OpenAMP framework supports OpenAMP firmware running as master, however,
-   the example to show this ability is not ready yet.
-2. In case of OpenAMP on Linux userspace for inter processors communication,
-   life cycle management with remoteproc is not supported yet, that is for now,
-   it is not able to load the remote firmware with OpenAMP running on Linux
-   userspace.
-3. In case of OpenAMP on Linux userspace for inter processors communication,
+1. In case of OpenAMP on Linux userspace for inter processors communication,
    it only supports static vrings and shared buffers.
-4. `sudo` is required to run the OpenAMP demos between Linux processes, as
+2. `sudo` is required to run the OpenAMP demos between Linux processes, as
    it doesn't work on some systems if you are normal users.
 
 For using the framework please refer to the wiki of the OpenAMP repo.
