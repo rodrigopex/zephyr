@@ -85,6 +85,8 @@ source "drivers/audio/Kconfig"
 
 source "drivers/neural_net/Kconfig"
 
+source "drivers/coprocessor/Kconfig"
+
 source "drivers/hwinfo/Kconfig"
 
 endmenu
