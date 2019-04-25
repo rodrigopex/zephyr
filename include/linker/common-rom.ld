@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
 #if defined(CONFIG_GEN_ISR_TABLES) && !defined(CONFIG_DYNAMIC_INTERRUPTS)
 	SECTION_PROLOGUE(sw_isr_table,,)
 	{
@@ -39,7 +41,7 @@
 		__object_access_start = .;
 		KEEP(*(".object_access.*"))
 		__object_access_end = .;
-	}
+	} GROUP_LINK_IN(ROMABLE_REGION)
 #endif
 
 	SECTION_PROLOGUE(app_shmem_regions,,)
