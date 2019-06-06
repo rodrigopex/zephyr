@@ -2031,7 +2031,7 @@ struct bt_conn *bt_conn_create_slave_le(const bt_addr_le_t *peer,
 	param_int.options |= (BT_LE_ADV_OPT_CONNECTABLE |
 			      BT_LE_ADV_OPT_ONE_TIME);
 
-	conn = bt_conn_lookup_addr_le(BT_ID_DEFAULT, peer);
+	conn = bt_conn_lookup_addr_le(param->id, peer);
 	if (conn) {
 		switch (conn->state) {
 		case BT_CONN_CONNECT_DIR_ADV:
@@ -2043,6 +2043,7 @@ struct bt_conn *bt_conn_create_slave_le(const bt_addr_le_t *peer,
 			if (err && (err != -EALREADY)) {
 				BT_WARN("Directed advertising could not be"
 					" started: %d", err);
+				bt_conn_unref(conn);
 				return NULL;
 			}
 
@@ -2060,6 +2061,7 @@ struct bt_conn *bt_conn_create_slave_le(const bt_addr_le_t *peer,
 		return NULL;
 	}
 
+	conn->id = param->id;
 	bt_conn_set_state(conn, BT_CONN_CONNECT_DIR_ADV);
 
 	err = bt_le_adv_start_internal(&param_int, NULL, 0, NULL, 0, peer);
