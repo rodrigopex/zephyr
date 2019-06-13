@@ -40,7 +40,12 @@
   #define SKIP_TO_KINETIS_FLASH_CONFIG
 #endif
 
+#if !defined(CONFIG_XIP) && (CONFIG_FLASH_SIZE == 0)
+#define ROM_ADDR RAM_ADDR
+#else
 #define ROM_ADDR (CONFIG_FLASH_BASE_ADDRESS + CONFIG_FLASH_LOAD_OFFSET)
+#endif
+
 #ifdef CONFIG_TI_CCFG_PRESENT
   #define CCFG_SIZE 88
   #define ROM_SIZE (CONFIG_FLASH_SIZE*1K - CONFIG_FLASH_LOAD_OFFSET - \
@@ -410,6 +415,10 @@ SECTIONS
 	*(COMMON)
 	*(".kernel_bss.*")
 
+#ifdef CONFIG_CODE_DATA_RELOCATION
+#include <linker_sram_bss_relocate.ld>
+#endif
+
         /*
          * As memory is cleared in words only, it is simpler to ensure the BSS
          * section ends on a 4 byte boundary. This wastes a maximum of 3 bytes.
@@ -447,6 +456,10 @@ SECTIONS
 #ifdef CONFIG_CUSTOM_RWDATA_LD
 /* Located in project source directory */
 #include <custom-rwdata.ld>
+#endif
+
+#ifdef CONFIG_CODE_DATA_RELOCATION
+#include <linker_sram_data_relocate.ld>
 #endif
 
 	} GROUP_DATA_LINK_IN(RAMABLE_REGION, ROMABLE_REGION)

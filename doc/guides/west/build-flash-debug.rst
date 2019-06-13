@@ -73,6 +73,18 @@ Additionally you can specify the build system target using the ``--target``
 You can list all targets with ``ninja help`` (or ``west build -t help``) inside
 the build folder.
 
+A clean build can be triggered by using the ``--pristine`` (or ``-p``) option.
+This is particularly handy if you want to switch source dirs or boards without
+using a different build dir::
+
+  west build -b qemu_x86 samples/philosophers
+  west build -p -b reel_board samples/hello_world
+
+If you are unsure about whether the command-line parameters you supply to
+``west build`` require a clean build you can let west decide for you by using
+the ``auto`` setting in the ``--pristine`` option::
+
+  west build -p auto -b reel_board samples/hello_world
 
 Finally, you can add additional arguments to the CMake invocation performed by
 ``west build`` by supplying additional parameters (after a ``--``) to the
@@ -92,6 +104,33 @@ CMake, even if a build system has already been generated. You can also force
 a CMake re-run using the ``-c`` (or ``--cmake``) option::
 
   west build -c
+
+Configuration Options
+=====================
+
+You can :ref:`configure <west-config-cmd>` ``west build`` using these options.
+
+.. NOTE: docs authors: keep this table sorted alphabetically
+
+.. list-table::
+   :widths: 10 30
+   :header-rows: 1
+
+   * - Option
+     - Description
+   * - ``build.pristine``
+     - String. Controls the way in which ``west build`` may clean the build
+       folder before building. Can take the following values:
+
+         - ``never`` (default): Never automatically make the build folder
+           pristine.
+         - ``auto``:  ``west build`` will automatically make the build folder
+           pristine before building, if a build system is present and the build
+           would fail otherwise (e.g. the user has specified a different board
+           or application from the one previously used to make the build
+           directory).
+         - ``always``: Always make the build folder pristine before building, if
+           a build system is present.
 
 .. _west-flashing:
 
