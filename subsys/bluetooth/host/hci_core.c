@@ -133,6 +133,21 @@ NET_BUF_POOL_DEFINE(hci_cmd_pool, CONFIG_BT_HCI_CMD_COUNT,
 NET_BUF_POOL_DEFINE(hci_rx_pool, CONFIG_BT_RX_BUF_COUNT,
 		    BT_BUF_RX_SIZE, BT_BUF_USER_DATA_MIN, NULL);
 
+#if defined(CONFIG_BT_CONN)
+/* Dedicated pool for HCI_Number_of_Completed_Packets. This event is always
+ * consumed synchronously by bt_recv_prio() so a single buffer is enough.
+ * Having a dedicated pool for it ensures that exhaustion of the RX pool
+ * cannot block the delivery of this priority event.
+ */
+NET_BUF_POOL_DEFINE(num_complete_pool, 1, BT_BUF_RX_SIZE,
+		    BT_BUF_USER_DATA_MIN, NULL);
+#endif /* CONFIG_BT_CONN */
+
+#if defined(CONFIG_BT_DISCARDABLE_BUF_COUNT)
+NET_BUF_POOL_DEFINE(discardable_pool, CONFIG_BT_DISCARDABLE_BUF_COUNT,
+		    BT_BUF_RX_SIZE, BT_BUF_USER_DATA_MIN, NULL);
+#endif /* CONFIG_BT_DISCARDABLE_BUF_COUNT */
+
 struct event_handler {
 	u8_t event;
 	u8_t min_len;
@@ -3070,6 +3085,8 @@ static void le_pkey_complete(struct net_buf *buf)
 	for (cb = pub_key_cb; cb; cb = cb->_next) {
 		cb->func(evt->status ? NULL : evt->key);
 	}
+
+	pub_key_cb = NULL;
 }
 
 static void le_dhkey_complete(struct net_buf *buf)
@@ -5317,6 +5334,10 @@ int bt_le_adv_start_internal(const struct bt_le_adv_param *param,
 	set_param.max_interval = sys_cpu_to_le16(param->interval_max);
 	set_param.channel_map  = 0x07;
 
+	if (bt_dev.adv_id != param->id) {
+		atomic_clear_bit(bt_dev.flags, BT_DEV_RPA_VALID);
+	}
+
 	/* Set which local identity address we're advertising with */
 	bt_dev.adv_id = param->id;
 	id_addr = &bt_dev.id_addr[param->id];
@@ -5625,6 +5646,45 @@ struct net_buf *bt_buf_get_cmd_complete(s32_t timeout)
 	return bt_buf_get_rx(BT_BUF_EVT, timeout);
 }
 
+struct net_buf *bt_buf_get_evt(u8_t evt, bool discardable, s32_t timeout)
+{
+	switch (evt) {
+#if defined(CONFIG_BT_CONN)
+	case BT_HCI_EVT_NUM_COMPLETED_PACKETS:
+		{
+			struct net_buf *buf;
+
+			buf = net_buf_alloc(&num_complete_pool, timeout);
+			if (buf) {
+				net_buf_reserve(buf, CONFIG_BT_HCI_RESERVE);
+				bt_buf_set_type(buf, BT_BUF_EVT);
+			}
+
+			return buf;
+		}
+#endif /* CONFIG_BT_CONN */
+	case BT_HCI_EVT_CMD_COMPLETE:
+	case BT_HCI_EVT_CMD_STATUS:
+		return bt_buf_get_cmd_complete(timeout);
+	default:
+#if defined(CONFIG_BT_DISCARDABLE_BUF_COUNT)
+		if (discardable) {
+			struct net_buf *buf;
+
+			buf = net_buf_alloc(&discardable_pool, timeout);
+			if (buf) {
+				net_buf_reserve(buf, CONFIG_BT_HCI_RESERVE);
+				bt_buf_set_type(buf, BT_BUF_EVT);
+			}
+
+			return buf;
+		}
+#endif /* CONFIG_BT_DISCARDABLE_BUF_COUNT */
+
+		return bt_buf_get_rx(BT_BUF_EVT, timeout);
+	}
+}
+
 #if defined(CONFIG_BT_BREDR)
 static int br_start_inquiry(const struct bt_br_discovery_param *param)
 {
@@ -5820,7 +5880,6 @@ u16_t bt_hci_get_cmd_opcode(struct net_buf *buf)
 #if defined(CONFIG_BT_ECC)
 int bt_pub_key_gen(struct bt_pub_key_cb *new_cb)
 {
-	struct bt_pub_key_cb *cb;
 	int err;
 
 	/*
@@ -5850,12 +5909,6 @@ int bt_pub_key_gen(struct bt_pub_key_cb *new_cb)
 		atomic_clear_bit(bt_dev.flags, BT_DEV_PUB_KEY_BUSY);
 		pub_key_cb = NULL;
 		return err;
-	}
-
-	for (cb = pub_key_cb; cb; cb = cb->_next) {
-		if (cb != new_cb) {
-			cb->func(NULL);
-		}
 	}
 
 	return 0;

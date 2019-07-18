@@ -2221,6 +2221,8 @@ static void gatt_find_info_rsp(struct bt_conn *conn, u8_t err,
 		struct bt_uuid_16 u16;
 		struct bt_uuid_128 u128;
 	} u;
+	int i;
+	bool skip = false;
 
 	BT_DBG("err 0x%02x", err);
 
@@ -2244,12 +2246,17 @@ static void gatt_find_info_rsp(struct bt_conn *conn, u8_t err,
 	}
 
 	/* Parse descriptors found */
-	for (length--, pdu = rsp->info; length >= len;
-	     length -= len, pdu = (const u8_t *)pdu + len) {
+	for (i = (length - 1) / len, pdu = rsp->info; i != 0;
+	     i--, pdu = (const u8_t *)pdu + len) {
 		struct bt_gatt_attr *attr;
 
 		info.i16 = pdu;
 		handle = sys_le16_to_cpu(info.i16->handle);
+
+		if (skip) {
+			skip = false;
+			continue;
+		}
 
 		switch (u.uuid.type) {
 		case BT_UUID_TYPE_16:
@@ -2281,10 +2288,7 @@ static void gatt_find_info_rsp(struct bt_conn *conn, u8_t err,
 			 * entry must be its value.
 			 */
 			if (!bt_uuid_cmp(&u.uuid, BT_UUID_GATT_CHRC)) {
-				if (length >= len) {
-					pdu = (const u8_t *)pdu + len;
-					length -= len;
-				}
+				skip = true;
 				continue;
 			}
 		}
@@ -2299,7 +2303,7 @@ static void gatt_find_info_rsp(struct bt_conn *conn, u8_t err,
 	}
 
 	/* Stop if could not parse the whole PDU */
-	if (length > 0) {
+	if (i) {
 		goto done;
 	}
 
@@ -2374,6 +2378,59 @@ int bt_gatt_discover(struct bt_conn *conn,
 	return -EINVAL;
 }
 
+static void parse_read_by_uuid(struct bt_conn *conn,
+			       struct bt_gatt_read_params *params,
+			       const void *pdu, u16_t length)
+{
+	const struct bt_att_read_type_rsp *rsp = pdu;
+
+	/* Parse values found */
+	for (length--, pdu = rsp->data; length;
+	     length -= rsp->len, pdu = (const u8_t *)pdu + rsp->len) {
+		const struct bt_att_data *data = pdu;
+		u16_t handle;
+		u8_t len;
+
+		handle = sys_le16_to_cpu(data->handle);
+
+		/* Handle 0 is invalid */
+		if (!handle) {
+			BT_ERR("Invalid handle");
+			return;
+		}
+
+		len = rsp->len > length ? length - 2 : rsp->len - 2;
+
+		BT_DBG("handle 0x%04x len %u value %u", handle, rsp->len, len);
+
+		/* Update start_handle */
+		params->by_uuid.start_handle = handle;
+
+		if (params->func(conn, 0, params, data->value, len) ==
+		    BT_GATT_ITER_STOP) {
+			return;
+		}
+
+		/* Check if long attribute */
+		if (rsp->len > length) {
+			break;
+		}
+
+		/* Stop if it's the last handle to be read */
+		if (params->by_uuid.start_handle == params->by_uuid.end_handle) {
+			params->func(conn, 0, params, NULL, 0);
+			return;
+		}
+
+		params->by_uuid.start_handle++;
+	}
+
+	/* Continue reading the attributes */
+	if (bt_gatt_read(conn, params) < 0) {
+		params->func(conn, BT_ATT_ERR_UNLIKELY, params, NULL, 0);
+	}
+}
+
 static void gatt_read_rsp(struct bt_conn *conn, u8_t err, const void *pdu,
 			  u16_t length, void *user_data)
 {
@@ -2383,6 +2440,11 @@ static void gatt_read_rsp(struct bt_conn *conn, u8_t err, const void *pdu,
 
 	if (err || !length) {
 		params->func(conn, err, params, NULL, 0);
+		return;
+	}
+
+	if (!params->handle_count) {
+		parse_read_by_uuid(conn, params, pdu, length);
 		return;
 	}
 
@@ -2426,6 +2488,34 @@ static int gatt_read_blob(struct bt_conn *conn,
 
 	BT_DBG("handle 0x%04x offset 0x%04x", params->single.handle,
 	       params->single.offset);
+
+	return gatt_send(conn, buf, gatt_read_rsp, params, NULL);
+}
+
+static int gatt_read_uuid(struct bt_conn *conn,
+			  struct bt_gatt_read_params *params)
+{
+	struct net_buf *buf;
+	struct bt_att_read_type_req *req;
+
+	buf = bt_att_create_pdu(conn, BT_ATT_OP_READ_TYPE_REQ, sizeof(*req));
+	if (!buf) {
+		return -ENOMEM;
+	}
+
+	req = net_buf_add(buf, sizeof(*req));
+	req->start_handle = sys_cpu_to_le16(params->by_uuid.start_handle);
+	req->end_handle = sys_cpu_to_le16(params->by_uuid.end_handle);
+
+	if (params->by_uuid.uuid->type == BT_UUID_TYPE_16) {
+		net_buf_add_le16(buf, BT_UUID_16(params->by_uuid.uuid)->val);
+	} else {
+		net_buf_add_mem(buf, BT_UUID_128(params->by_uuid.uuid)->val, 16);
+	}
+
+	BT_DBG("start_handle 0x%04x end_handle 0x%04x uuid %s",
+		params->by_uuid.start_handle, params->by_uuid.end_handle,
+		bt_uuid_str(params->by_uuid.uuid));
 
 	return gatt_send(conn, buf, gatt_read_rsp, params, NULL);
 }
@@ -2483,10 +2573,13 @@ int bt_gatt_read(struct bt_conn *conn, struct bt_gatt_read_params *params)
 
 	__ASSERT(conn, "invalid parameters\n");
 	__ASSERT(params && params->func, "invalid parameters\n");
-	__ASSERT(params->handle_count, "invalid parameters\n");
 
 	if (conn->state != BT_CONN_CONNECTED) {
 		return -ENOTCONN;
+	}
+
+	if (params->handle_count == 0) {
+		return gatt_read_uuid(conn, params);
 	}
 
 	if (params->handle_count > 1) {
