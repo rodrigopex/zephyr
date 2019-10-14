@@ -56,7 +56,6 @@ MPU_RO_REGION_START = """
 
 MPU_RO_REGION_END = """
 
-    MPU_ALIGN(_{0}_mpu_ro_region_end - _{0}_mpu_ro_region_start);
     _{0}_mpu_ro_region_end = .;
 
 """
@@ -75,6 +74,24 @@ LINKER_SECTION_SEQ = """
         __{0}_{1}_end = .;
         __{0}_{1}_start = ADDR(_{2}_{3}_SECTION_NAME);
         __{0}_{1}_size = SIZEOF(_{2}_{3}_SECTION_NAME);
+"""
+
+LINKER_SECTION_SEQ_MPU = """
+
+/* Linker section for memory region {2} for {3} section  */
+
+	SECTION_PROLOGUE(_{2}_{3}_SECTION_NAME,,)
+        {{
+                __{0}_{1}_start = .;
+                {4}
+#if {6}
+                . = ALIGN({6});
+#else
+                MPU_ALIGN(__{0}_{1}_size);
+#endif
+                __{0}_{1}_end = .;
+	}} {5}
+        __{0}_{1}_size = __{0}_{1}_end - __{0}_{1}_start;
 """
 
 SOURCE_CODE_INCLUDES = """
@@ -175,6 +192,12 @@ def assign_to_correct_mem_region(memory_type,
             iteration_sections["text"] or iteration_sections["rodata"]):
         all_regions = True
 
+    pos = memory_type.find('_')
+    if pos in range(len(memory_type)):
+        align_size = int(memory_type[pos+1:])
+        memory_type = memory_type[:pos]
+        mpu_align[memory_type] = align_size
+
     if memory_type in complete_list_of_sections:
         for iter_sec in ["text", "rodata", "data", "bss"]:
             if ((iteration_sections[iter_sec] or all_regions) and
@@ -215,7 +238,17 @@ def string_create_helper(region, memory_type,
         if memory_type == 'SRAM' and (region == 'data' or region == 'bss'):
             linker_string += tmp
         else:
-            linker_string += LINKER_SECTION_SEQ.format(memory_type.lower(), region,
+            if memory_type != 'SRAM' and region == 'rodata':
+                align_size = 0
+                if memory_type in mpu_align.keys():
+                    align_size = mpu_align[memory_type]
+
+                linker_string += LINKER_SECTION_SEQ_MPU.format(memory_type.lower(),
+                                                    region, memory_type.upper(),
+                                                    region.upper(), tmp,
+                                                load_address_string, align_size)
+            else:
+                linker_string += LINKER_SECTION_SEQ.format(memory_type.lower(), region,
                                                    memory_type.upper(), region.upper(),
                                                    tmp, load_address_string)
 
@@ -382,6 +415,8 @@ def create_dict_wrt_mem():
 
 
 def main():
+    global mpu_align
+    mpu_align = {}
     parse_args()
     searchpath = args.directory
     linker_file = args.output

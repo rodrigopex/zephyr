@@ -326,9 +326,23 @@ def analyze_die_array(die):
         elements.append(ub.value + 1)
 
     if not elements:
+        if type_offset in type_env.keys():
+            mt = type_env[type_offset]
+            if mt.has_kobject():
+                if isinstance(mt, KobjectType) and mt.name == STACK_TYPE:
+                    elements.append(1)
+                    type_env[die.offset] = ArrayType(die.offset, elements, type_offset)
+    else:
+        type_env[die.offset] = ArrayType(die.offset, elements, type_offset)
+
+
+def analyze_typedef(die):
+    type_offset = die_get_type_offset(die)
+
+    if type_offset not in type_env.keys():
         return
 
-    type_env[die.offset] = ArrayType(die.offset, elements, type_offset)
+    type_env[die.offset] = type_env[type_offset]
 
 
 def addr_deref(elf, addr):
@@ -380,10 +394,8 @@ class ElfHelper:
             sys.stderr.write("ELF file has no DWARF information\n")
             sys.exit(1)
 
-        kram_start = syms["__kernel_ram_start"]
-        kram_end = syms["__kernel_ram_end"]
-        krom_start = syms["_image_rom_start"]
-        krom_end = syms["_image_rom_end"]
+        app_smem_start = syms["_app_smem_start"]
+        app_smem_end = syms["_app_smem_end"]
 
         di = self.elf.get_dwarf_info()
 
@@ -401,6 +413,8 @@ class ElfHelper:
                     analyze_die_const(die)
                 elif die.tag == "DW_TAG_array_type":
                     analyze_die_array(die)
+                elif die.tag == "DW_TAG_typedef":
+                    analyze_typedef(die)
                 elif die.tag == "DW_TAG_variable":
                     variables.append(die)
 
@@ -496,8 +510,7 @@ class ElfHelper:
 
             _, user_ram_allowed = kobjects[ko.type_obj.name]
             if (not user_ram_allowed and
-                    (addr < kram_start or addr >= kram_end) and
-                    (addr < krom_start or addr >= krom_end)):
+                    (addr >= app_smem_start and addr < app_smem_end)):
 
                 self.debug_die(die,
                                "object '%s' found in invalid location %s"
