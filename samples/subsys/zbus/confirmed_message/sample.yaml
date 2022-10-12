@@ -1,0 +1,22 @@
+sample:
+  name: Confirmed messages
+tests:
+  sample.zbus.confirmed_messages:
+    harness: console
+    harness_config:
+      type: multi_line
+      ordered: false
+      regex:
+        - "I:  *** USB sending message sequence 0 to interested tasks (on-to-many) ***"
+        - "I:  *** USB sending message sequence 1 to interested tasks (on-to-many) ***"
+        - "I:  *** USB sending message sequence 2 to interested tasks (on-to-many) ***"
+        - "I:  *** USB sending message sequence 3 to interested tasks (on-to-many) ***"
+        - "I:  *** USB sending message sequence 4 to interested tasks (on-to-many) ***"
+        - "I:  *** USB sending message sequence 5 to interested tasks (on-to-many) ***"
+        - "I:  *** USB sending message sequence 6 to interested tasks (on-to-many) ***"
+        - "I:  *** USB sending message sequence 7 to interested tasks (on-to-many) ***"
+        - "I:  *** USB sending message sequence 8 to interested tasks (on-to-many) ***"
+        - "I:  *** USB sending message sequence 9 to interested tasks (on-to-many) ***"
+        - "I: Sample finished with success. 10 confirmed messages sent and confirmed"
+    platform_exclude: qemu_leon3
+    tags: zbus
