@@ -4,6 +4,7 @@
  */
 
 #include <stdint.h>
+#include <string.h>
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -22,22 +23,22 @@ struct acc_msg {
 	int z;
 };
 
-ZBUS_CHAN_DEFINE(version_chan,	     /* Name */
+ZBUS_CHAN_DEFINE(version_chan,       /* Name */
 		 struct version_msg, /* Message type */
 
-		 NULL,		       /* Validator */
-		 NULL,		       /* User data */
+		 NULL,                 /* Validator */
+		 NULL,                 /* User data */
 		 ZBUS_OBSERVERS_EMPTY, /* observers */
 		 ZBUS_MSG_INIT(.major = 0, .minor = 1,
 			       .build = 2) /* Initial value major 0, minor 1, build 2 */
 );
 
-ZBUS_CHAN_DEFINE(acc_data_chan,	 /* Name */
+ZBUS_CHAN_DEFINE(acc_data_chan,  /* Name */
 		 struct acc_msg, /* Message type */
 
-		 NULL,				       /* Validator */
-		 NULL,		       /* User data */
-		 ZBUS_OBSERVERS(foo_lis, bar_sub),     /* observers */
+		 NULL,                                 /* Validator */
+		 NULL,                                 /* User data */
+		 ZBUS_OBSERVERS(bar_sub),              /* observers */
 		 ZBUS_MSG_INIT(.x = 0, .y = 0, .z = 0) /* Initial value */
 );
 
@@ -55,12 +56,12 @@ static bool simple_chan_validator(const void *msg, size_t msg_size)
 }
 
 ZBUS_CHAN_DEFINE(simple_chan, /* Name */
-		 int,	      /* Message type */
+		 int,         /* Message type */
 
 		 simple_chan_validator, /* Validator */
-		 NULL,		       /* User data */
-		 ZBUS_OBSERVERS_EMPTY,	/* observers */
-		 0			/* Initial value is 0 */
+		 NULL,                  /* User data */
+		 ZBUS_OBSERVERS_EMPTY,  /* observers */
+		 0                      /* Initial value is 0 */
 );
 
 static void listener_callback_example(const struct zbus_channel *chan)
@@ -70,7 +71,9 @@ static void listener_callback_example(const struct zbus_channel *chan)
 	LOG_INF("From listener -> Acc x=%d, y=%d, z=%d", acc->x, acc->y, acc->z);
 }
 
-ZBUS_LISTENER_DEFINE(foo_lis, listener_callback_example);
+/* ZBUS_LISTENER_DEFINE(foo_lis, listener_callback_example); */
+
+struct zbus_observer *foo_lis_ptr = NULL;
 
 ZBUS_SUBSCRIBER_DEFINE(bar_sub, 4);
 
@@ -89,8 +92,8 @@ static void subscriber_task(void)
 	}
 }
 
-K_THREAD_DEFINE(subscriber_task_id, CONFIG_MAIN_STACK_SIZE,
-		subscriber_task, NULL, NULL, NULL, 3, 0, 0);
+K_THREAD_DEFINE(subscriber_task_id, CONFIG_MAIN_STACK_SIZE, subscriber_task, NULL, NULL, NULL, 3, 0,
+		0);
 
 #if defined(CONFIG_ZBUS_STRUCTS_ITERABLE_ACCESS)
 static int count;
@@ -120,6 +123,16 @@ static bool print_observer_data_iterator(const struct zbus_observer *obs)
 
 int main(void)
 {
+
+	struct zbus_observer foo_lis = {.name = "foo_lis",
+					.enabled = 1,
+					.queue = ((void *)0),
+					.callback = (listener_callback_example)};
+
+	foo_lis_ptr = (struct zbus_observer *)k_malloc(sizeof(struct zbus_observer));
+	memcpy(foo_lis_ptr, &foo_lis, sizeof(foo_lis));
+	zbus_chan_add_obs(&acc_data_chan, foo_lis_ptr, K_FOREVER);
+
 	int err, value;
 	struct acc_msg acc1 = {.x = 1, .y = 1, .z = 1};
 	const struct version_msg *v = zbus_chan_const_msg(&version_chan);
