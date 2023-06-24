@@ -11,21 +11,28 @@ LOG_MODULE_DECLARE(zbus, CONFIG_ZBUS_LOG_LEVEL);
 
 ZBUS_CHAN_DECLARE(project_info_chan, sensor_data_chan);
 
-ZBUS_OBS_DECLARE(sensor_thread_sub, core_thread_sub, mock_lis);
+ZBUS_OBS_DECLARE(sensor_thread_sub, core_thread_sub, lora_thread_sub, mock_lis);
 
 ZBUS_CHAN_DEFINE(start_trigger_chan,                /* Channel name */
-		 uint8_t,                           /* Message type */
+		 bool,                              /* Message type */
 		 NULL,                              /* User data */
 		 NULL,                              /* Validator */
 		 ZBUS_OBSERVERS(sensor_thread_sub), /* Observers */
+		 false);
+
+ZBUS_CHAN_DEFINE(payload_chan,                    /* Channel name */
+		 uint64_t,                        /* Message type */
+		 NULL,                            /* User data */
+		 NULL,                            /* Validator */
+		 ZBUS_OBSERVERS(lora_thread_sub), /* Observers */
 		 0);
 
-ZBUS_CHAN_DEFINE(payload_chan,         /* Channel name */
-		 uint64_t,             /* Message type */
-		 NULL,                 /* User data */
-		 NULL,                 /* Validator */
-		 ZBUS_OBSERVERS_EMPTY, /* Observers */
-		 0);
+ZBUS_CHAN_DEFINE(transmission_done_chan, /* Channel name */
+		 bool,                   /* Message type */
+		 NULL,                   /* User data */
+		 NULL,                   /* Validator */
+		 ZBUS_OBSERVERS_EMPTY,   /* Observers */
+		 false);
 
 int main(void)
 {
@@ -41,9 +48,10 @@ int main(void)
 		prj_info->hardware_version.minor);
 
 	/* Adding a mock for testing the current status of the system */
-	zbus_chan_add_obs(&sensor_data_chan, &mock_lis, K_NO_WAIT);
 	zbus_chan_add_obs(&sensor_data_chan, &core_thread_sub, K_NO_WAIT);
+	zbus_chan_add_obs(&sensor_data_chan, &mock_lis, K_NO_WAIT);
 	zbus_chan_add_obs(&payload_chan, &mock_lis, K_NO_WAIT);
+	zbus_chan_add_obs(&transmission_done_chan, &mock_lis, K_NO_WAIT);
 
 	while (1) {
 		zbus_chan_notify(&start_trigger_chan, K_FOREVER);
