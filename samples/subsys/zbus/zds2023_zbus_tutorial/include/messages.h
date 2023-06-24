@@ -13,4 +13,8 @@ struct sensor_data_msg {
 	int z;
 };
 
+struct payload_msg {
+	uint64_t sum;
+};
+
 #endif // _MESSAGES_H_
