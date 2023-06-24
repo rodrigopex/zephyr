@@ -9,7 +9,15 @@
 #include <zephyr/zbus/zbus.h>
 LOG_MODULE_DECLARE(zbus, CONFIG_ZBUS_LOG_LEVEL);
 
-ZBUS_CHAN_DECLARE(project_info_chan);
+ZBUS_CHAN_DECLARE(project_info_chan, sensor_data_chan);
+ZBUS_OBS_DECLARE(sensor_thread_sub, mock_lis);
+
+ZBUS_CHAN_DEFINE(start_trigger_chan,                /* Channel name */
+		 uint8_t,                           /* Message type */
+		 NULL,                              /* User data */
+		 NULL,                              /* Validator */
+		 ZBUS_OBSERVERS(sensor_thread_sub), /* Observers */
+		 0);
 
 int main(void)
 {
@@ -23,6 +31,15 @@ int main(void)
 
 	LOG_INF(" - Hardware %c%s", prj_info->hardware_version.major,
 		prj_info->hardware_version.minor);
+
+	/* Adding a mock for testing the current status of the system */
+	zbus_chan_add_obs(&sensor_data_chan, &mock_lis, K_NO_WAIT);
+
+	while (1) {
+		zbus_chan_notify(&start_trigger_chan, K_FOREVER);
+
+		k_msleep(2000);
+	}
 
 	return 0;
 }
