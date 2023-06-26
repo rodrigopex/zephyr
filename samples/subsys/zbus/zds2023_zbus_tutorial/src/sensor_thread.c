@@ -3,9 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 #include "messages.h"
+#include "native_rtc.h"
+#include "zephyr/sys/printk.h"
+#include <stdint.h>
 
 #include <zephyr/kernel.h>
 #include <zephyr/zbus/zbus.h>
+
+#define GET_TIME_IN_NS() (native_rtc_gettime_us(RTC_CLOCK_PSEUDOHOSTREALTIME) * NSEC_PER_USEC)
 
 ZBUS_SUBSCRIBER_DEFINE(sensor_thread_sub, 4);
 
@@ -29,7 +34,11 @@ void sensor_thread()
 		sdata.y += 10;
 		sdata.z += 100;
 
+		uint64_t start = GET_TIME_IN_NS();
 		zbus_chan_pub(&sensor_data_chan, &sdata, K_MSEC(500));
+		uint64_t delta = GET_TIME_IN_NS() - start;
+
+		printk(" *** Publishing duration: %lluus\n", delta / 1000);
 	}
 }
 

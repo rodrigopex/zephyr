@@ -1,0 +1,8 @@
+# Copyright (c) 2023 Rodrigo Peixoto <rodrigopex@gmail.com>
+# SPDX-License-Identifier: Apache-2.0
+
+config CORE_AS_LISTENER
+	bool "The core logic executes inside a listener"
+	default y
+
+source "Kconfig.zephyr"
