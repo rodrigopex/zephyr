@@ -7,18 +7,19 @@
 
 #include <stdint.h>
 
-struct project_info_msg {
+struct app_info_msg {
 	const struct {
 		uint8_t major;
 		uint8_t minor;
 		uint8_t patch;
 	} firmware_version;
-	const struct {
+	struct {
 		char major;
 		char minor[4];
 	} hardware_version;
 	const char serial_number[32];
 	const char model[16];
+	uint32_t sample_timeout;
 };
 
 #endif // _PROJECT_INFO_H_
