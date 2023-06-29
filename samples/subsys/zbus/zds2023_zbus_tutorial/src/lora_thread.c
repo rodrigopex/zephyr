@@ -21,7 +21,7 @@ void lora_thread()
 
 	uint64_t payload = 0;
 
-	bool transmission_done = true;
+	bool transmission_done = false;
 
 	while (!zbus_sub_wait(&lora_thread_sub, &chan, K_FOREVER)) {
 
