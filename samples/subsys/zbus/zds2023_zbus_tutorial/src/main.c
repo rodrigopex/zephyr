@@ -6,6 +6,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/init.h>
 #include <zephyr/zbus/zbus.h>
 LOG_MODULE_DECLARE(zbus, CONFIG_ZBUS_LOG_LEVEL);
 
@@ -48,6 +49,17 @@ void trigger_timer_handler(struct k_timer *dummy)
 
 K_TIMER_DEFINE(trigger_timer, trigger_timer_handler, NULL);
 
+int mock_observers_init(void)
+{
+	/* Adding a mock for testing the current status of the system */
+	zbus_chan_add_obs(&sensor_data_chan, &mock_lis, K_NO_WAIT);
+	zbus_chan_add_obs(&payload_chan, &mock_lis, K_NO_WAIT);
+	zbus_chan_add_obs(&transmission_done_chan, &mock_lis, K_NO_WAIT);
+	return 0;
+}
+
+SYS_INIT(mock_observers_init, APPLICATION, 0);
+
 int main(void)
 {
 	/* Pretend to fetch some data from external source to describe hardware and the samples
@@ -76,11 +88,6 @@ int main(void)
 
 	LOG_INF(" - Hardware %c%s", app_info->hardware_version.major,
 		app_info->hardware_version.minor);
-
-	/* Adding a mock for testing the current status of the system */
-	zbus_chan_add_obs(&sensor_data_chan, &mock_lis, K_NO_WAIT);
-	zbus_chan_add_obs(&payload_chan, &mock_lis, K_NO_WAIT);
-	zbus_chan_add_obs(&transmission_done_chan, &mock_lis, K_NO_WAIT);
 
 	/* while (1) { */
 	/* 	zbus_chan_notify(&start_trigger_chan, K_FOREVER); */
