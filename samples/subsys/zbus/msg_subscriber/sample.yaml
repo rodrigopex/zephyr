@@ -1,0 +1,53 @@
+sample:
+  name: Message subscriber
+tests:
+  sample.zbus.msg_subscriber:
+    harness: console
+    harness_config:
+      type: multi_line
+      ordered: true
+      regex:
+      - "I:  ---> Publishing to acc_data_chan channel"
+      - "I: From listener -> Acc x=1, y=10, z=100"
+      - "I: From msg subscriber bar_msg_sub1 -> Acc x=1, y=10, z=100"
+      - "I: From msg subscriber bar_msg_sub2 -> Acc x=1, y=10, z=100"
+      - "I: From msg subscriber bar_msg_sub3 -> Acc x=1, y=10, z=100"
+      - "I: From msg subscriber bar_msg_sub4 -> Acc x=1, y=10, z=100"
+      - "I: From msg subscriber bar_msg_sub5 -> Acc x=1, y=10, z=100"
+      - "I: From msg subscriber bar_msg_sub6 -> Acc x=1, y=10, z=100"
+      - "I: From msg subscriber bar_msg_sub7 -> Acc x=1, y=10, z=100"
+      - "I: From msg subscriber bar_msg_sub8 -> Acc x=1, y=10, z=100"
+      - "I: From msg subscriber bar_msg_sub9 -> Acc x=1, y=10, z=100"
+      - "I: From msg subscriber bar_msg_sub10 -> Acc x=1, y=10, z=100"
+      - "I: From msg subscriber bar_msg_sub11 -> Acc x=1, y=10, z=100"
+      - "I: From msg subscriber bar_msg_sub12 -> Acc x=1, y=10, z=100"
+      - "I: From msg subscriber bar_msg_sub13 -> Acc x=1, y=10, z=100"
+      - "I: From msg subscriber bar_msg_sub14 -> Acc x=1, y=10, z=100"
+      - "I: From msg subscriber bar_msg_sub15 -> Acc x=1, y=10, z=100"
+      - "I: From msg subscriber bar_msg_sub16 -> Acc x=1, y=10, z=100"
+      - "I: From subscriber bar_sub1 -> Acc x=1, y=10, z=100"
+      - "I: From subscriber bar_sub2 -> Acc x=1, y=10, z=100"
+      - "I:  ---> Publishing to acc_data_chan channel"
+      - "I: From listener -> Acc x=2, y=20, z=200"
+      - "I: From msg subscriber bar_msg_sub1 -> Acc x=2, y=20, z=200"
+      - "I: From msg subscriber bar_msg_sub2 -> Acc x=2, y=20, z=200"
+      - "I: From msg subscriber bar_msg_sub3 -> Acc x=2, y=20, z=200"
+      - "I: From msg subscriber bar_msg_sub4 -> Acc x=2, y=20, z=200"
+      - "I: From msg subscriber bar_msg_sub5 -> Acc x=2, y=20, z=200"
+      - "I: From msg subscriber bar_msg_sub6 -> Acc x=2, y=20, z=200"
+      - "I: From msg subscriber bar_msg_sub7 -> Acc x=2, y=20, z=200"
+      - "I: From msg subscriber bar_msg_sub8 -> Acc x=2, y=20, z=200"
+      - "I: From msg subscriber bar_msg_sub9 -> Acc x=2, y=20, z=200"
+      - "I: From msg subscriber bar_msg_sub10 -> Acc x=2, y=20, z=200"
+      - "I: From msg subscriber bar_msg_sub11 -> Acc x=2, y=20, z=200"
+      - "I: From msg subscriber bar_msg_sub12 -> Acc x=2, y=20, z=200"
+      - "I: From msg subscriber bar_msg_sub13 -> Acc x=2, y=20, z=200"
+      - "I: From msg subscriber bar_msg_sub14 -> Acc x=2, y=20, z=200"
+      - "I: From msg subscriber bar_msg_sub15 -> Acc x=2, y=20, z=200"
+      - "I: From msg subscriber bar_msg_sub16 -> Acc x=2, y=20, z=200"
+      - "I: From subscriber bar_sub1 -> Acc x=2, y=20, z=200"
+      - "I: From subscriber bar_sub2 -> Acc x=2, y=20, z=200"
+
+    tags: zbus
+    integration_platforms:
+      - qemu_x86
