@@ -6,8 +6,17 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/printk.h>
+#include <zephyr/net/buf.h>
 #include <zephyr/zbus/zbus.h>
 LOG_MODULE_REGISTER(zbus, CONFIG_ZBUS_LOG_LEVEL);
+
+void _zbus_net_buf_destroy(struct net_buf *buf)
+{
+	LOG_ERR(" *** Network buffer freed! %p", buf);
+	net_buf_destroy(buf);
+}
+
+NET_BUF_POOL_HEAP_DEFINE(_zbus_msg_subscribers_pool, 16, 0, _zbus_net_buf_destroy);
 
 k_timeout_t _zbus_timeout_remainder(uint64_t end_ticks)
 {
@@ -72,6 +81,22 @@ static int _zbus_notify_observers(const struct zbus_channel *chan, uint64_t end_
 			(*obs)->callback(chan);
 		}
 	}
+	/* Notify static message subscribers */
+	struct net_buf *buf =
+		net_buf_alloc_len(&_zbus_msg_subscribers_pool,
+				  sizeof(const struct zbus_channel *) + zbus_chan_msg_size(chan),
+				  _zbus_timeout_remainder(end_ticks));
+	__ASSERT(buf != NULL, "Buffer not allocated on the pool");
+	net_buf_add_mem(buf, zbus_chan_msg(chan), zbus_chan_msg_size(chan));
+	net_buf_add_mem(buf, &chan, sizeof(const struct zbus_channel *));
+	for (const struct zbus_observer *const *obs = chan->observers; *obs != NULL; ++obs) {
+		if ((*obs)->enabled && ((*obs)->message_fifo != NULL)) {
+			struct net_buf *cloned_buf =
+				net_buf_clone(buf, _zbus_timeout_remainder(end_ticks));
+			net_buf_put((*obs)->message_fifo, cloned_buf);
+		}
+	}
+	net_buf_unref(buf);
 
 #if CONFIG_ZBUS_RUNTIME_OBSERVERS_POOL_SIZE > 0
 	_zbus_notify_runtime_listeners(chan);
@@ -79,8 +104,9 @@ static int _zbus_notify_observers(const struct zbus_channel *chan, uint64_t end_
 
 	/* Notify static subscribers */
 	for (const struct zbus_observer *const *obs = chan->observers; *obs != NULL; ++obs) {
-		if ((*obs)->enabled && ((*obs)->queue != NULL)) {
-			err = k_msgq_put((*obs)->queue, &chan, _zbus_timeout_remainder(end_ticks));
+		if ((*obs)->enabled && ((*obs)->notification_queue != NULL)) {
+			err = k_msgq_put((*obs)->notification_queue, &chan,
+					 _zbus_timeout_remainder(end_ticks));
 			_ZBUS_ASSERT(err == 0, "could not deliver notification to observer %s.",
 				     _ZBUS_OBS_NAME(*obs));
 			if (err) {
@@ -196,9 +222,42 @@ int zbus_sub_wait(const struct zbus_observer *sub, const struct zbus_channel **c
 	_ZBUS_ASSERT(sub != NULL, "sub is required");
 	_ZBUS_ASSERT(chan != NULL, "chan is required");
 
-	if (sub->queue == NULL) {
+	if (sub->notification_queue == NULL) {
 		return -EINVAL;
 	}
 
-	return k_msgq_get(sub->queue, chan, timeout);
+	return k_msgq_get(sub->notification_queue, chan, timeout);
+}
+
+int zbus_sub_wait_msg(const struct zbus_observer *sub, const struct zbus_channel **chan, void *msg,
+		      k_timeout_t timeout)
+{
+	_ZBUS_ASSERT(!k_is_in_isr(), "zbus cannot be used inside ISRs");
+	_ZBUS_ASSERT(sub != NULL, "sub is required");
+	_ZBUS_ASSERT(chan != NULL, "chan is required");
+	_ZBUS_ASSERT(msg != NULL, "msg is required");
+
+	if (sub->message_fifo == NULL) {
+		return -EINVAL;
+	}
+
+	struct net_buf *buf = net_buf_get(sub->message_fifo, timeout);
+	if (buf == NULL) {
+		return -ENODATA;
+	}
+
+	memcpy(chan, net_buf_remove_mem(buf, sizeof(const struct zbus_channel *)),
+	       sizeof(const struct zbus_channel *));
+
+	if (*chan == NULL) {
+		net_buf_unref(buf);
+
+		return -EILSEQ;
+	}
+
+	memcpy(msg, net_buf_remove_mem(buf, zbus_chan_msg_size(*chan)), zbus_chan_msg_size(*chan));
+
+	net_buf_unref(buf);
+
+	return 0;
 }
