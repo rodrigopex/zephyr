@@ -73,7 +73,7 @@ ZTEST(basic, test_specification_based__zbus_obs_add_rm_obs)
 	zassert_equal(CONFIG_ZBUS_RUNTIME_OBSERVERS_POOL_SIZE,
 		      k_mem_slab_num_free_get(zbus_runtime_obs_pool()), NULL);
 	/* Tyring to add same static observer as one dynamic */
-	zassert_equal(-EEXIST, zbus_chan_add_obs(&chan2, &lis2, K_MSEC(200)), NULL);
+	zassert_equal(-EALREADY, zbus_chan_add_obs(&chan2, &lis2, K_MSEC(200)), NULL);
 
 	zassert_equal(0, zbus_chan_pub(&chan1, &sd, K_MSEC(500)), NULL);
 	zassert_equal(count_callback1, 0, "The counter could not be more than zero, no obs");
