@@ -10,13 +10,10 @@
 #include <zephyr/zbus/zbus.h>
 LOG_MODULE_REGISTER(zbus, CONFIG_ZBUS_LOG_LEVEL);
 
-void _zbus_net_buf_destroy(struct net_buf *buf)
-{
-	LOG_ERR(" *** Network buffer freed! %p", buf);
-	net_buf_destroy(buf);
-}
-
-NET_BUF_POOL_HEAP_DEFINE(_zbus_msg_subscribers_pool, 16, 0, _zbus_net_buf_destroy);
+#if defined(CONFIG_ZBUS_MSG_SUBSCRIBER)
+NET_BUF_POOL_HEAP_DEFINE(_zbus_msg_subscribers_pool, CONFIG_ZBUS_MSG_SUBSCRIBER_NET_BUF_POOL_SIZE,
+			 0, NULL);
+#endif /* CONFIG_ZBUS_MSG_SUBSCRIBER */
 
 k_timeout_t _zbus_timeout_remainder(uint64_t end_ticks)
 {
@@ -25,14 +22,13 @@ k_timeout_t _zbus_timeout_remainder(uint64_t end_ticks)
 	return K_TICKS((k_ticks_t)MAX(end_ticks - now_ticks, 0));
 }
 
-#if (CONFIG_ZBUS_RUNTIME_OBSERVERS_POOL_SIZE > 0)
-static inline void _zbus_notify_runtime_listeners(const struct zbus_channel *chan)
+static inline void _zbus_notify_immediate(const struct zbus_channel *chan, uint64_t end_ticks)
 {
 	__ASSERT(chan != NULL, "chan is required");
 
 	struct zbus_observer_node *obs_nd, *tmp;
 
-	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(chan->runtime_observers, obs_nd, tmp, node) {
+	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(chan->observers, obs_nd, tmp, node) {
 
 		__ASSERT(obs_nd != NULL, "observer node is NULL");
 
@@ -40,22 +36,47 @@ static inline void _zbus_notify_runtime_listeners(const struct zbus_channel *cha
 			obs_nd->obs->callback(chan);
 		}
 	}
+
+#if defined(CONFIG_ZBUS_MSG_SUBSCRIBER)
+	struct net_buf *buf =
+		net_buf_alloc_len(&_zbus_msg_subscribers_pool,
+				  sizeof(const struct zbus_channel *) + zbus_chan_msg_size(chan),
+				  _zbus_timeout_remainder(end_ticks));
+
+	_ZBUS_ASSERT(buf != NULL,
+		     "net_buf zbus_msg_subscribers_pool is unavailable or heap is full");
+
+	net_buf_add_mem(buf, zbus_chan_msg(chan), zbus_chan_msg_size(chan));
+	net_buf_add_mem(buf, &chan, sizeof(const struct zbus_channel *));
+
+	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(chan->observers, obs_nd, tmp, node) {
+		if (obs_nd->obs->enabled && (obs_nd->obs->message_fifo != NULL)) {
+			struct net_buf *cloned_buf =
+				net_buf_clone(buf, _zbus_timeout_remainder(end_ticks));
+
+			_ZBUS_ASSERT(cloned_buf != NULL,
+				     "net_buf zbus_msg_subscribers_pool is unavailable");
+
+			net_buf_put(obs_nd->obs->message_fifo, cloned_buf);
+		}
+	}
+	net_buf_unref(buf);
+#endif /* CONFIG_ZBUS_MSG_SUBSCRIBER */
 }
 
-static inline int _zbus_notify_runtime_subscribers(const struct zbus_channel *chan,
-						   uint64_t end_ticks)
+static inline int _zbus_notify_subscribers(const struct zbus_channel *chan, uint64_t end_ticks)
 {
 	__ASSERT(chan != NULL, "chan is required");
 
 	int last_error = 0, err;
 	struct zbus_observer_node *obs_nd, *tmp;
 
-	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(chan->runtime_observers, obs_nd, tmp, node) {
+	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(chan->observers, obs_nd, tmp, node) {
 
 		__ASSERT(obs_nd != NULL, "observer node is NULL");
 
-		if (obs_nd->obs->enabled && (obs_nd->obs->queue != NULL)) {
-			err = k_msgq_put(obs_nd->obs->queue, &chan,
+		if (obs_nd->obs->enabled && (obs_nd->obs->notification_queue != NULL)) {
+			err = k_msgq_put(obs_nd->obs->notification_queue, &chan,
 					 _zbus_timeout_remainder(end_ticks));
 
 			_ZBUS_ASSERT(err == 0,
@@ -68,61 +89,6 @@ static inline int _zbus_notify_runtime_subscribers(const struct zbus_channel *ch
 		}
 	}
 
-	return last_error;
-}
-#endif /* CONFIG_ZBUS_RUNTIME_OBSERVERS_POOL_SIZE */
-
-static int _zbus_notify_observers(const struct zbus_channel *chan, uint64_t end_ticks)
-{
-	int last_error = 0, err;
-	/* Notify static listeners */
-	for (const struct zbus_observer *const *obs = chan->observers; *obs != NULL; ++obs) {
-		if ((*obs)->enabled && ((*obs)->callback != NULL)) {
-			(*obs)->callback(chan);
-		}
-	}
-	/* Notify static message subscribers */
-	struct net_buf *buf =
-		net_buf_alloc_len(&_zbus_msg_subscribers_pool,
-				  sizeof(const struct zbus_channel *) + zbus_chan_msg_size(chan),
-				  _zbus_timeout_remainder(end_ticks));
-	__ASSERT(buf != NULL, "Buffer not allocated on the pool");
-	net_buf_add_mem(buf, zbus_chan_msg(chan), zbus_chan_msg_size(chan));
-	net_buf_add_mem(buf, &chan, sizeof(const struct zbus_channel *));
-	for (const struct zbus_observer *const *obs = chan->observers; *obs != NULL; ++obs) {
-		if ((*obs)->enabled && ((*obs)->message_fifo != NULL)) {
-			struct net_buf *cloned_buf =
-				net_buf_clone(buf, _zbus_timeout_remainder(end_ticks));
-			net_buf_put((*obs)->message_fifo, cloned_buf);
-		}
-	}
-	net_buf_unref(buf);
-
-#if CONFIG_ZBUS_RUNTIME_OBSERVERS_POOL_SIZE > 0
-	_zbus_notify_runtime_listeners(chan);
-#endif /* CONFIG_ZBUS_RUNTIME_OBSERVERS_POOL_SIZE */
-
-	/* Notify static subscribers */
-	for (const struct zbus_observer *const *obs = chan->observers; *obs != NULL; ++obs) {
-		if ((*obs)->enabled && ((*obs)->notification_queue != NULL)) {
-			err = k_msgq_put((*obs)->notification_queue, &chan,
-					 _zbus_timeout_remainder(end_ticks));
-			_ZBUS_ASSERT(err == 0, "could not deliver notification to observer %s.",
-				     _ZBUS_OBS_NAME(*obs));
-			if (err) {
-				LOG_ERR("Observer %s at %p could not be notified. Error code %d",
-					_ZBUS_OBS_NAME(*obs), *obs, err);
-				last_error = err;
-			}
-		}
-	}
-
-#if CONFIG_ZBUS_RUNTIME_OBSERVERS_POOL_SIZE > 0
-	err = _zbus_notify_runtime_subscribers(chan, end_ticks);
-	if (err) {
-		last_error = err;
-	}
-#endif /* CONFIG_ZBUS_RUNTIME_OBSERVERS_POOL_SIZE */
 	return last_error;
 }
 
@@ -146,11 +112,11 @@ int zbus_chan_pub(const struct zbus_channel *chan, const void *msg, k_timeout_t 
 
 	memcpy(chan->message, msg, chan->message_size);
 
-	err = _zbus_notify_observers(chan, end_ticks);
+	_zbus_notify_immediate(chan, end_ticks);
 
 	k_mutex_unlock(chan->mutex);
 
-	return err;
+	return _zbus_notify_subscribers(chan, end_ticks);
 }
 
 int zbus_chan_read(const struct zbus_channel *chan, void *msg, k_timeout_t timeout)
@@ -184,11 +150,11 @@ int zbus_chan_notify(const struct zbus_channel *chan, k_timeout_t timeout)
 		return err;
 	}
 
-	err = _zbus_notify_observers(chan, end_ticks);
+	_zbus_notify_immediate(chan, end_ticks);
 
 	k_mutex_unlock(chan->mutex);
 
-	return err;
+	return _zbus_notify_subscribers(chan, end_ticks);
 }
 
 int zbus_chan_claim(const struct zbus_channel *chan, k_timeout_t timeout)
@@ -229,6 +195,8 @@ int zbus_sub_wait(const struct zbus_observer *sub, const struct zbus_channel **c
 	return k_msgq_get(sub->notification_queue, chan, timeout);
 }
 
+#if defined(CONFIG_ZBUS_MSG_SUBSCRIBER)
+
 int zbus_sub_wait_msg(const struct zbus_observer *sub, const struct zbus_channel **chan, void *msg,
 		      k_timeout_t timeout)
 {
@@ -261,3 +229,5 @@ int zbus_sub_wait_msg(const struct zbus_observer *sub, const struct zbus_channel
 
 	return 0;
 }
+
+#endif /* CONFIG_ZBUS_MSG_SUBSCRIBER */
