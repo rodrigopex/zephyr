@@ -27,21 +27,13 @@ int zbus_chan_add_obs(const struct zbus_channel *chan, const struct zbus_observe
 	_ZBUS_ASSERT(chan != NULL, "chan is required");
 	_ZBUS_ASSERT(obs != NULL, "obs is required");
 
-	/* Check if the observer is already a static observer */
-	for (const struct zbus_observer *const *static_obs = chan->observers; *static_obs != NULL;
-	     ++static_obs) {
-		if (*static_obs == obs) {
-			return -EEXIST;
-		}
-	}
-
 	err = k_mutex_lock(chan->mutex, timeout);
 	if (err) {
 		return err;
 	}
 
 	/* Check if the observer is already a runtime observer */
-	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(chan->runtime_observers, obs_nd, tmp, node) {
+	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(chan->observers, obs_nd, tmp, node) {
 		if (obs_nd->obs == obs) {
 			k_mutex_unlock(chan->mutex);
 
@@ -62,7 +54,7 @@ int zbus_chan_add_obs(const struct zbus_channel *chan, const struct zbus_observe
 
 	obs_nd->obs = obs;
 
-	sys_slist_append(chan->runtime_observers, &obs_nd->node);
+	sys_slist_append(chan->observers, &obs_nd->node);
 
 	k_mutex_unlock(chan->mutex);
 
@@ -85,10 +77,9 @@ int zbus_chan_rm_obs(const struct zbus_channel *chan, const struct zbus_observer
 		return err;
 	}
 
-	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(chan->runtime_observers, obs_nd, tmp, node) {
+	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(chan->observers, obs_nd, tmp, node) {
 		if (obs_nd->obs == obs) {
-			sys_slist_remove(chan->runtime_observers, &prev_obs_nd->node,
-					 &obs_nd->node);
+			sys_slist_remove(chan->observers, &prev_obs_nd->node, &obs_nd->node);
 
 			k_mem_slab_free(&_zbus_runtime_obs_pool, (void **)&obs_nd);
 
