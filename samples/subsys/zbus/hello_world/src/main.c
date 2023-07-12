@@ -101,8 +101,13 @@ static bool print_channel_data_iterator(const struct zbus_channel *chan)
 	LOG_INF("      Message size: %d", zbus_chan_msg_size(chan));
 	++count;
 	LOG_INF("      Observers:");
-	for (const struct zbus_observer *const *obs = chan->observers; *obs != NULL; ++obs) {
-		LOG_INF("      - %s", (*obs)->name);
+
+	struct zbus_observer_node *obs_nd, *tmp;
+
+	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(chan->observers, obs_nd, tmp, node) {
+		__ASSERT(obs_nd != NULL, "observer node is NULL");
+
+		LOG_INF("      - %s", obs_nd->obs->name);
 	}
 
 	return true;
@@ -110,7 +115,8 @@ static bool print_channel_data_iterator(const struct zbus_channel *chan)
 
 static bool print_observer_data_iterator(const struct zbus_observer *obs)
 {
-	LOG_INF("%d - %s %s", count, obs->queue ? "Subscriber" : "Listener", zbus_obs_name(obs));
+	LOG_INF("%d - %s %s", count, obs->notification_queue ? "Subscriber" : "Listener",
+		zbus_obs_name(obs));
 
 	++count;
 
