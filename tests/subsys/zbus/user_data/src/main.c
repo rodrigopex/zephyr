@@ -67,7 +67,7 @@ static void foo_subscriber_thread(void)
 	struct zbus_channel *chan = NULL;
 
 	while (1) {
-		if (!k_msgq_get(foo_subscriber.queue, &chan, K_FOREVER)) {
+		if (!k_msgq_get(foo_subscriber.notification_queue, &chan, K_FOREVER)) {
 			if (chan == &(regular_chan)) {
 				if (!zbus_chan_claim(&regular_chan, K_FOREVER)) {
 					int *count = zbus_chan_user_data(&regular_chan);
