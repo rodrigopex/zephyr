@@ -27,7 +27,7 @@ int zbus_chan_add_obs(const struct zbus_channel *chan, const struct zbus_observe
 	_ZBUS_ASSERT(chan != NULL, "chan is required");
 	_ZBUS_ASSERT(obs != NULL, "obs is required");
 
-	err = k_mutex_lock(chan->mutex, timeout);
+	err = k_sem_take(chan->sem, timeout);
 	if (err) {
 		return err;
 	}
@@ -35,7 +35,7 @@ int zbus_chan_add_obs(const struct zbus_channel *chan, const struct zbus_observe
 	/* Check if the observer is already a runtime observer */
 	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(chan->observers, obs_nd, tmp, node) {
 		if (obs_nd->obs == obs) {
-			k_mutex_unlock(chan->mutex);
+			k_sem_give(chan->sem);
 
 			return -EALREADY;
 		}
@@ -47,7 +47,7 @@ int zbus_chan_add_obs(const struct zbus_channel *chan, const struct zbus_observe
 	if (err) {
 		LOG_ERR("Could not allocate memory on runtime observers pool\n");
 
-		k_mutex_unlock(chan->mutex);
+		k_sem_give(chan->sem);
 
 		return err;
 	}
@@ -56,7 +56,7 @@ int zbus_chan_add_obs(const struct zbus_channel *chan, const struct zbus_observe
 
 	sys_slist_append(chan->observers, &obs_nd->node);
 
-	k_mutex_unlock(chan->mutex);
+	k_sem_give(chan->sem);
 
 	return 0;
 }
@@ -72,7 +72,7 @@ int zbus_chan_rm_obs(const struct zbus_channel *chan, const struct zbus_observer
 	_ZBUS_ASSERT(chan != NULL, "chan is required");
 	_ZBUS_ASSERT(obs != NULL, "obs is required");
 
-	err = k_mutex_lock(chan->mutex, timeout);
+	err = k_sem_take(chan->sem, timeout);
 	if (err) {
 		return err;
 	}
@@ -83,7 +83,7 @@ int zbus_chan_rm_obs(const struct zbus_channel *chan, const struct zbus_observer
 
 			k_mem_slab_free(&_zbus_runtime_obs_pool, (void **)&obs_nd);
 
-			k_mutex_unlock(chan->mutex);
+			k_sem_give(chan->sem);
 
 			return 0;
 		}
@@ -91,7 +91,7 @@ int zbus_chan_rm_obs(const struct zbus_channel *chan, const struct zbus_observer
 		prev_obs_nd = obs_nd;
 	}
 
-	k_mutex_unlock(chan->mutex);
+	k_sem_give(chan->sem);
 
 	return -ENODATA;
 }

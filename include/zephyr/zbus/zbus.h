@@ -52,15 +52,17 @@ struct zbus_channel {
 	 */
 	bool (*const validator)(const void *msg, size_t msg_size);
 
-	/** Access control mutex. Points to the mutex used to avoid race conditions
+	/** Access control semaphore. Points to the semaphore used to avoid race conditions
 	 * for accessing the channel.
 	 */
-	struct k_mutex *mutex;
+	struct k_sem *sem;
 
 	/** Channel observer list. Represents the channel's observers list, it can be empty
 	 * or have listeners and subscribers mixed in any sequence. It can be changed in runtime.
 	 */
 	sys_slist_t *observers;
+
+	int *highest_observer_priority;
 };
 
 /**
@@ -83,6 +85,8 @@ struct zbus_observer {
 	/** Observer name. */
 	const char *const name;
 #endif
+	int *priority;
+
 	/** Enabled flag. Indicates if observer is receiving notification. */
 	bool enabled;
 	/** Observer message queue. It turns the observer into a subscriber. */
@@ -206,20 +210,21 @@ k_timeout_t _zbus_timeout_remainder(uint64_t end_ticks);
  */
 #define ZBUS_CHAN_DEFINE(_name, _type, _validator, _user_data, _observers, _init_val)              \
 	static _type _CONCAT(_zbus_message_, _name) = _init_val;                                   \
-	static K_MUTEX_DEFINE(_CONCAT(_zbus_mutex_, _name));                                       \
+	static int _CONCAT(_CONCAT(_zbus_chan_, _name), _prio) =                                   \
+		CONFIG_NUM_PREEMPT_PRIORITIES - 1;                                                 \
+	static K_SEM_DEFINE(_CONCAT(_zbus_sem_, _name), 1, 1);                                     \
 	static sys_slist_t _CONCAT(_observers_, _name);                                            \
 	FOR_EACH_NONEMPTY_TERM(_ZBUS_OBS_EXTERN, (;), _observers)                                  \
 		FOR_EACH_FIXED_ARG_NONEMPTY_TERM(_ZBUS_OBS_NODE, (;), _name, _observers)           \
 	const _ZBUS_STRUCT_DECLARE(zbus_channel, _name) = {                                        \
-		ZBUS_CHANNEL_NAME_INIT(_name)               /* Name */                             \
-			.message_size = sizeof(_type),      /* Message size */                     \
-		.user_data = _user_data,                    /* User data */                        \
-		.message = &_CONCAT(_zbus_message_, _name), /* Reference to the message */         \
-		.validator = (_validator),                  /* Validator function */               \
-		.mutex = &_CONCAT(_zbus_mutex_, _name),     /* Channel's Mutex */                  \
-		.observers = &(_CONCAT(_observers_, _name)) /* Observer list */                    \
-	};                                                                                         \
-                                                                                                   \
+		ZBUS_CHANNEL_NAME_INIT(_name)                /* Name */                            \
+			.message_size = sizeof(_type),       /* Message size */                    \
+		.user_data = _user_data,                     /* User data */                       \
+		.message = &_CONCAT(_zbus_message_, _name),  /* Reference to the message */        \
+		.validator = (_validator),                   /* Validator function */              \
+		.sem = &_CONCAT(_zbus_sem_, _name),          /* Channel's Semaphore */             \
+		.observers = &(_CONCAT(_observers_, _name)), /* Observer list */                   \
+		.highest_observer_priority = &_CONCAT(_CONCAT(_zbus_chan_, _name), _prio)};        \
 	int _CONCAT(_init_zbus_channel_, _name)(void)                                              \
 	{                                                                                          \
 		const struct zbus_channel *chan = &(_name);                                        \
@@ -256,12 +261,13 @@ k_timeout_t _zbus_timeout_remainder(uint64_t end_ticks);
  * @param[in] _name The subscriber's name.
  */
 #define ZBUS_MSG_SUBSCRIBER_DEFINE(_name)                                                          \
+	static int _CONCAT(_CONCAT(_zbus_obs_, _name), _prio) = CONFIG_NUM_PREEMPT_PRIORITIES - 1; \
 	K_FIFO_DEFINE(_zbus_observer_fifo_##_name);                                                \
-	_ZBUS_STRUCT_DECLARE(zbus_observer,                                                        \
-			     _name) = {ZBUS_OBSERVER_NAME_INIT(_name) /* Name field */             \
-					       .enabled = true,                                    \
-				       .message_fifo = &_zbus_observer_fifo_##_name,               \
-				       .notification_queue = NULL, .callback = NULL}
+	_ZBUS_STRUCT_DECLARE(zbus_observer, _name) = {                                             \
+		ZBUS_OBSERVER_NAME_INIT(_name) /* Name field */                                    \
+			.priority = &_CONCAT(_CONCAT(_zbus_obs_, _name), _prio),                   \
+		.enabled = true, .message_fifo = &_zbus_observer_fifo_##_name,                     \
+		.notification_queue = NULL, .callback = NULL}
 
 #endif /* CONFIG_ZBUS_MSG_SUBSCRIBER */
 /**
@@ -275,12 +281,14 @@ k_timeout_t _zbus_timeout_remainder(uint64_t end_ticks);
  * @param[in] _queue_size The notification queue's size.
  */
 #define ZBUS_SUBSCRIBER_DEFINE(_name, _queue_size)                                                 \
+	static int _CONCAT(_CONCAT(_zbus_obs_, _name), _prio) = CONFIG_NUM_PREEMPT_PRIORITIES - 1; \
 	K_MSGQ_DEFINE(_zbus_observer_queue_##_name, sizeof(const struct zbus_channel *),           \
 		      _queue_size, sizeof(const struct zbus_channel *));                           \
 	_ZBUS_STRUCT_DECLARE(zbus_observer, _name) = {                                             \
 		ZBUS_OBSERVER_NAME_INIT(_name) /* Name field */                                    \
-			.enabled = true,                                                           \
-		.notification_queue = &_zbus_observer_queue_##_name, .callback = NULL}
+			.priority = &_CONCAT(_CONCAT(_zbus_obs_, _name), _prio),                   \
+		.enabled = true, .notification_queue = &_zbus_observer_queue_##_name,              \
+		.callback = NULL}
 
 /**
  * @brief Define and initialize a listener.
@@ -293,10 +301,10 @@ k_timeout_t _zbus_timeout_remainder(uint64_t end_ticks);
  * @param[in] _cb The callback function.
  */
 #define ZBUS_LISTENER_DEFINE(_name, _cb)                                                           \
-	_ZBUS_STRUCT_DECLARE(zbus_observer,                                                        \
-			     _name) = {ZBUS_OBSERVER_NAME_INIT(_name) /* Name field */             \
-					       .enabled = true,                                    \
-				       .notification_queue = NULL, .callback = (_cb)}
+	_ZBUS_STRUCT_DECLARE(zbus_observer, _name) = {                                             \
+		ZBUS_OBSERVER_NAME_INIT(_name) /* Name field */                                    \
+			.priority = NULL,                                                          \
+		.enabled = true, .notification_queue = NULL, .callback = (_cb)}
 
 /**
  *
