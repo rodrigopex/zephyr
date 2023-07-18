@@ -57,12 +57,25 @@ struct zbus_channel {
 	 */
 	struct k_sem *sem;
 
+#if defined(CONFIG_ZBUS_RUNTIME_OBSERVERS) || defined(__DOXYGEN__)
 	/** Channel observer list. Represents the channel's observers list, it can be empty
 	 * or have listeners and subscribers mixed in any sequence. It can be changed in runtime.
 	 */
 	sys_slist_t *observers;
+#endif /* CONFIG_ZBUS_RUNTIME_OBSERVERS */
 
-	int *highest_observer_priority;
+	/** Static channel observer list start index. Considering the ITERABLE SECTIONS allocation
+	 * order.
+	 */
+	int16_t *observers_start_idx;
+
+	/** Static channel observer list end index. Considering the ITERABLE SECTIONS allocation
+	 * order.
+	 */
+	int16_t *observers_end_idx;
+
+	/** The highest priority among the observers. It can change in runtime. */
+	int8_t *highest_observer_priority;
 };
 
 /**
@@ -85,7 +98,7 @@ struct zbus_observer {
 	/** Observer name. */
 	const char *const name;
 #endif
-	int *priority;
+	int8_t *priority;
 
 	/** Enabled flag. Indicates if observer is receiving notification. */
 	bool enabled;
@@ -102,6 +115,11 @@ struct zbus_observer {
 };
 
 /** @cond INTERNAL_HIDDEN */
+
+struct zbus_channel_observation {
+	const struct zbus_channel *const chan;
+	const struct zbus_observer *const obs;
+};
 
 #if defined(CONFIG_ZBUS_ASSERT_MOCK)
 #define _ZBUS_ASSERT(_cond, _fmt, ...)                                                             \
@@ -151,20 +169,49 @@ struct zbus_observer {
 			    LIST_DROP_EMPTY(__VA_ARGS__, _)), /* if so, expand to nothing */       \
 		    (),                                       /* otherwise, expand to: */          \
 		    (/* FOR_EACH_FIXED_ARG() on nonempty elements, */                              \
-		     FOR_EACH_FIXED_ARG(                                                           \
+		     FOR_EACH_IDX_FIXED_ARG(                                                       \
 			     F, sep, fixed_arg,                                                    \
 			     LIST_DROP_EMPTY(__VA_ARGS__)) /* plus a final terminator */           \
 		     __DEBRACKET sep))
 
-#define _ZBUS_OBS_NODE(_obs, _name)                                                                \
-	static struct zbus_observer_node _CONCAT(_CONCAT(_zbus_slist_node_, _name),                \
-						 _obs) = {.obs = &(_obs)}
+#define _ZBUS_OBSERVATION_PREFIX(_idx)                                                             \
+	GET_ARG_N(_idx, 00, 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17,    \
+		  18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37,  \
+		  38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57,  \
+		  58, 59, 60, 61, 62, 63)
+
+#define _ZBUS_CHAN_OBSERVATION(_idx, _obs, _chan)                                                  \
+	const STRUCT_SECTION_ITERABLE(                                                             \
+		zbus_channel_observation,                                                          \
+		_CONCAT(_chan, _ZBUS_OBSERVATION_PREFIX(UTIL_INC(_idx)))) = {.chan = &_chan,       \
+									     .obs = &_obs};
 
 #define _ZBUS_OBS_APPEND(_obs, _name)                                                              \
 	sys_slist_append(chan->observers, &_CONCAT(_CONCAT(_zbus_slist_node_, _name), _obs).node)
 
+#if defined(CONFIG_ZBUS_RUNTIME_OBSERVERS) || defined(__DOXYGEN__)
+#define _ZBUS_RUNTIME_OBSERVERS(_name)      .observers = &(_CONCAT(_observers_, _name)),
+#define _ZBUS_RUNTIME_OBSERVERS_DECL(_name) static sys_slist_t _CONCAT(_observers_, _name);
+#else
+#define _ZBUS_RUNTIME_OBSERVERS(_name)
+#define _ZBUS_RUNTIME_OBSERVERS_DECL(_name)
+#endif /* CONFIG_ZBUS_RUNTIME_OBSERVERS */
 k_timeout_t _zbus_timeout_remainder(uint64_t end_ticks);
 /** @endcond */
+
+/**
+ * @brief Add a static observer to a channel.
+ *
+ * This macro initializes a channel observation by receiving the
+ * channel and the observer.
+ *
+ * @param _chan Channel instance.
+ * @param _obs Observer instance.
+ */
+#define ZBUS_CHAN_ADD_OBS(_chan, _obs, _prio)                                                      \
+	const STRUCT_SECTION_ITERABLE(zbus_channel_observation,                                    \
+				      _CONCAT(_CONCAT(_chan, zz), _CONCAT(_prio, _obs))) = {       \
+		.chan = &_chan, .obs = &_obs};
 
 /**
  * @def ZBUS_OBS_DECLARE
@@ -210,31 +257,26 @@ k_timeout_t _zbus_timeout_remainder(uint64_t end_ticks);
  */
 #define ZBUS_CHAN_DEFINE(_name, _type, _validator, _user_data, _observers, _init_val)              \
 	static _type _CONCAT(_zbus_message_, _name) = _init_val;                                   \
-	static int _CONCAT(_CONCAT(_zbus_chan_, _name), _prio) =                                   \
-		CONFIG_NUM_PREEMPT_PRIORITIES - 1;                                                 \
+	static uint16_t _CONCAT(_CONCAT(_zbus_chan_, _name), _obs_start_idx) = -1;                 \
+	static uint16_t _CONCAT(_CONCAT(_zbus_chan_, _name), _obs_end_idx) = -1;                   \
+	static int8_t _CONCAT(_CONCAT(_zbus_chan_, _name), _prio) =                                \
+		K_LOWEST_APPLICATION_THREAD_PRIO;                                                  \
 	static K_SEM_DEFINE(_CONCAT(_zbus_sem_, _name), 1, 1);                                     \
-	static sys_slist_t _CONCAT(_observers_, _name);                                            \
-	FOR_EACH_NONEMPTY_TERM(_ZBUS_OBS_EXTERN, (;), _observers)                                  \
-		FOR_EACH_FIXED_ARG_NONEMPTY_TERM(_ZBUS_OBS_NODE, (;), _name, _observers)           \
+	_ZBUS_RUNTIME_OBSERVERS_DECL(_name);                                                       \
 	const _ZBUS_STRUCT_DECLARE(zbus_channel, _name) = {                                        \
-		ZBUS_CHANNEL_NAME_INIT(_name)                /* Name */                            \
-			.message_size = sizeof(_type),       /* Message size */                    \
-		.user_data = _user_data,                     /* User data */                       \
-		.message = &_CONCAT(_zbus_message_, _name),  /* Reference to the message */        \
-		.validator = (_validator),                   /* Validator function */              \
-		.sem = &_CONCAT(_zbus_sem_, _name),          /* Channel's Semaphore */             \
-		.observers = &(_CONCAT(_observers_, _name)), /* Observer list */                   \
+		ZBUS_CHANNEL_NAME_INIT(_name) /* Maybe removed */                                  \
+			.message_size = sizeof(_type),                                             \
+		.user_data = _user_data,                                                           \
+		.message = &_CONCAT(_zbus_message_, _name),                                        \
+		.validator = (_validator),                                                         \
+		.sem = &_CONCAT(_zbus_sem_, _name),                                                \
+		_ZBUS_RUNTIME_OBSERVERS(_name) /* Maybe removed */                                 \
+			.observers_start_idx =                                                     \
+			&_CONCAT(_CONCAT(_zbus_chan_, _name), _obs_start_idx),                     \
+		.observers_end_idx = &_CONCAT(_CONCAT(_zbus_chan_, _name), _obs_end_idx),          \
 		.highest_observer_priority = &_CONCAT(_CONCAT(_zbus_chan_, _name), _prio)};        \
-	int _CONCAT(_init_zbus_channel_, _name)(void)                                              \
-	{                                                                                          \
-		const struct zbus_channel *chan = &(_name);                                        \
-		sys_slist_init(chan->observers);                                                   \
-                                                                                                   \
-		FOR_EACH_FIXED_ARG_NONEMPTY_TERM(_ZBUS_OBS_APPEND, (;), _name, _observers)         \
-		return 0;                                                                          \
-	}                                                                                          \
-	SYS_INIT(_CONCAT(_init_zbus_channel_, _name), APPLICATION,                                 \
-		 CONFIG_ZBUS_CHANNELS_SYS_INIT_PRIORITY)
+	FOR_EACH_NONEMPTY_TERM(_ZBUS_OBS_EXTERN, (;), _observers)                                  \
+	FOR_EACH_FIXED_ARG_NONEMPTY_TERM(_ZBUS_CHAN_OBSERVATION, (;), _name, _observers)
 
 /**
  * @brief Initialize a message.
@@ -261,7 +303,8 @@ k_timeout_t _zbus_timeout_remainder(uint64_t end_ticks);
  * @param[in] _name The subscriber's name.
  */
 #define ZBUS_MSG_SUBSCRIBER_DEFINE(_name)                                                          \
-	static int _CONCAT(_CONCAT(_zbus_obs_, _name), _prio) = CONFIG_NUM_PREEMPT_PRIORITIES - 1; \
+	static int8_t _CONCAT(_CONCAT(_zbus_obs_, _name), _prio) =                                 \
+		K_LOWEST_APPLICATION_THREAD_PRIO;                                                  \
 	K_FIFO_DEFINE(_zbus_observer_fifo_##_name);                                                \
 	_ZBUS_STRUCT_DECLARE(zbus_observer, _name) = {                                             \
 		ZBUS_OBSERVER_NAME_INIT(_name) /* Name field */                                    \
@@ -281,7 +324,8 @@ k_timeout_t _zbus_timeout_remainder(uint64_t end_ticks);
  * @param[in] _queue_size The notification queue's size.
  */
 #define ZBUS_SUBSCRIBER_DEFINE(_name, _queue_size)                                                 \
-	static int _CONCAT(_CONCAT(_zbus_obs_, _name), _prio) = CONFIG_NUM_PREEMPT_PRIORITIES - 1; \
+	static int8_t _CONCAT(_CONCAT(_zbus_obs_, _name), _prio) =                                 \
+		K_LOWEST_APPLICATION_THREAD_PRIO;                                                  \
 	K_MSGQ_DEFINE(_zbus_observer_queue_##_name, sizeof(const struct zbus_channel *),           \
 		      _queue_size, sizeof(const struct zbus_channel *));                           \
 	_ZBUS_STRUCT_DECLARE(zbus_observer, _name) = {                                             \
@@ -501,7 +545,7 @@ static inline void *zbus_chan_user_data(const struct zbus_channel *chan)
 	return chan->user_data;
 }
 
-#if (CONFIG_ZBUS_RUNTIME_OBSERVERS_POOL_SIZE > 0) || defined(__DOXYGEN__)
+#if defined(CONFIG_ZBUS_RUNTIME_OBSERVERS) || defined(__DOXYGEN__)
 
 /**
  * @brief Add an observer to a channel.
@@ -542,16 +586,7 @@ int zbus_chan_add_obs(const struct zbus_channel *chan, const struct zbus_observe
 int zbus_chan_rm_obs(const struct zbus_channel *chan, const struct zbus_observer *obs,
 		     k_timeout_t timeout);
 
-/**
- * @brief Get zbus runtime observers pool.
- *
- * This routine returns a reference of the runtime observers pool.
- *
- * @return Reference of runtime observers pool.
- */
-struct k_mem_slab *zbus_runtime_obs_pool(void);
-
-#endif /* CONFIG_ZBUS_RUNTIME_OBSERVERS_POOL_SIZE */
+#endif /* CONFIG_ZBUS_RUNTIME_OBSERVERS */
 
 /** @cond INTERNAL_HIDDEN */
 
@@ -575,14 +610,13 @@ struct zbus_observer_node {
  * @retval -EFAULT A parameter is incorrect, or the function context is invalid (inside an ISR). The
  * function only returns this value when the CONFIG_ZBUS_ASSERT_MOCK is enabled.
  */
-static inline int zbus_obs_set_enable(struct zbus_observer *obs, bool enabled)
-{
-	_ZBUS_ASSERT(obs != NULL, "obs is required");
+int zbus_obs_set_enable(struct zbus_observer *obs, bool enabled);
 
-	obs->enabled = enabled;
+#if defined(CONFIG_ZBUS_SMART_LOCK) || defined(__DOXYGEN__)
 
-	return 0;
-}
+int zbus_obs_thread_attach(const struct zbus_observer *obs);
+
+#endif /* CONFIG_ZBUS_SMART_LOCK */
 
 #if defined(CONFIG_ZBUS_OBSERVER_NAME) || defined(__DOXYGEN__)
 

@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <zephyr/sys/iterable_sections.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/net/buf.h>
@@ -15,6 +16,30 @@ NET_BUF_POOL_HEAP_DEFINE(_zbus_msg_subscribers_pool, CONFIG_ZBUS_MSG_SUBSCRIBER_
 			 0, NULL);
 
 #endif /* CONFIG_ZBUS_MSG_SUBSCRIBER */
+int _zbus_init(void)
+{
+	const struct zbus_channel *curr = NULL;
+	const struct zbus_channel *prev = NULL;
+
+	STRUCT_SECTION_FOREACH(zbus_channel_observation, observation) {
+		curr = observation->chan;
+
+		if (prev != curr) {
+			if (prev == NULL) {
+				*curr->observers_start_idx = 0;
+				*curr->observers_end_idx = 0;
+			} else {
+				*curr->observers_start_idx = *prev->observers_end_idx;
+				*curr->observers_end_idx = *prev->observers_end_idx;
+			}
+			prev = curr;
+		}
+
+		++(*curr->observers_end_idx);
+	}
+	return 0;
+}
+SYS_INIT(_zbus_init, APPLICATION, CONFIG_ZBUS_CHANNELS_SYS_INIT_PRIORITY);
 
 k_timeout_t _zbus_timeout_remainder(uint64_t end_ticks)
 {
@@ -27,14 +52,14 @@ static inline void _zbus_notify_immediate(const struct zbus_channel *chan, uint6
 {
 	__ASSERT(chan != NULL, "chan is required");
 
-	struct zbus_observer_node *obs_nd, *tmp;
+	struct zbus_channel_observation *observation;
 
-	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(chan->observers, obs_nd, tmp, node) {
+	for (int16_t i = *chan->observers_start_idx, limit = *chan->observers_end_idx; i < limit;
+	     ++i) {
+		STRUCT_SECTION_GET(zbus_channel_observation, i, &observation);
 
-		__ASSERT(obs_nd != NULL, "observer node is NULL");
-
-		if (obs_nd->obs->enabled && (obs_nd->obs->callback != NULL)) {
-			obs_nd->obs->callback(chan);
+		if (observation->obs->enabled && (observation->obs->callback != NULL)) {
+			observation->obs->callback(chan);
 		}
 	}
 
@@ -45,20 +70,21 @@ static inline void _zbus_notify_immediate(const struct zbus_channel *chan, uint6
 				  sizeof(const struct zbus_channel *) + zbus_chan_msg_size(chan),
 				  _zbus_timeout_remainder(end_ticks));
 
-	_ZBUS_ASSERT(buf != NULL,
-		     "net_buf zbus_msg_subscribers_pool is unavailable or heap is full");
+	_ZBUS_ASSERT(buf != NULL, "net_buf zbus_msg_subscribers_pool or heap is full");
 
 	net_buf_add_mem(buf, zbus_chan_msg(chan), zbus_chan_msg_size(chan));
 	net_buf_add_mem(buf, &chan, sizeof(const struct zbus_channel *));
 
-	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(chan->observers, obs_nd, tmp, node) {
-		if (obs_nd->obs->enabled && (obs_nd->obs->message_fifo != NULL)) {
+	for (int i = *chan->observers_start_idx; i < *chan->observers_end_idx; ++i) {
+		STRUCT_SECTION_GET(zbus_channel_observation, i, &observation);
+
+		if (observation->obs->enabled && (observation->obs->message_fifo != NULL)) {
 			struct net_buf *cloned_buf =
 				net_buf_clone(buf, _zbus_timeout_remainder(end_ticks));
 
 			_ZBUS_ASSERT(cloned_buf != NULL,
 				     "net_buf zbus_msg_subscribers_pool is full or unavailable");
-			net_buf_put(obs_nd->obs->message_fifo, cloned_buf);
+			net_buf_put(observation->obs->message_fifo, cloned_buf);
 		}
 	}
 	net_buf_unref(buf);
@@ -66,24 +92,87 @@ static inline void _zbus_notify_immediate(const struct zbus_channel *chan, uint6
 #endif /* CONFIG_ZBUS_MSG_SUBSCRIBER */
 }
 
-static inline int _zbus_notify_subscribers(const struct zbus_channel *chan, uint64_t end_ticks)
+#if defined(CONFIG_ZBUS_RUNTIME_OBSERVERS)
+static inline int _zbus_notify_runtime_observers(const struct zbus_channel *chan,
+						 uint64_t end_ticks)
 {
 	__ASSERT(chan != NULL, "chan is required");
 
-	int last_error = 0, err;
+	int last_error = 0;
 	struct zbus_observer_node *obs_nd, *tmp;
+
+#if defined(CONFIG_ZBUS_MSG_SUBSCRIBER)
+	/* Notify message subscribers */
+	struct net_buf *buf =
+		net_buf_alloc_len(&_zbus_msg_subscribers_pool,
+				  sizeof(const struct zbus_channel *) + zbus_chan_msg_size(chan),
+				  _zbus_timeout_remainder(end_ticks));
+
+	_ZBUS_ASSERT(buf != NULL, "net_buf zbus_msg_subscribers_pool is "
+				  "unavailable or heap is full");
+
+	net_buf_add_mem(buf, zbus_chan_msg(chan), zbus_chan_msg_size(chan));
+	net_buf_add_mem(buf, &chan, sizeof(const struct zbus_channel *));
+
+#endif /* CONFIG_ZBUS_MSG_SUBSCRIBER */
 
 	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(chan->observers, obs_nd, tmp, node) {
 
 		__ASSERT(obs_nd != NULL, "observer node is NULL");
 
-		if (obs_nd->obs->enabled && (obs_nd->obs->notification_queue != NULL)) {
-			err = k_msgq_put(obs_nd->obs->notification_queue, &chan,
+		if (!obs_nd->obs->enabled) {
+			continue;
+		}
+		if (obs_nd->obs->callback != NULL) {
+			obs_nd->obs->callback(chan);
+		}
+
+#if defined(CONFIG_ZBUS_MSG_SUBSCRIBER)
+		else if (obs_nd->obs->message_fifo != NULL) {
+
+			struct net_buf *cloned_buf =
+				net_buf_clone(buf, _zbus_timeout_remainder(end_ticks));
+
+			_ZBUS_ASSERT(cloned_buf != NULL, "net_buf zbus_msg_subscribers_pool is "
+							 "full or unavailable");
+			net_buf_put(obs_nd->obs->message_fifo, cloned_buf);
+
+		}
+#endif /* CONFIG_ZBUS_MSG_SUBSCRIBER */
+
+		else if (obs_nd->obs->notification_queue != NULL) {
+			last_error = k_msgq_put(obs_nd->obs->notification_queue, &chan,
+						_zbus_timeout_remainder(end_ticks));
+		}
+	}
+
+#if defined(CONFIG_ZBUS_MSG_SUBSCRIBER)
+	net_buf_unref(buf);
+#endif /* CONFIG_ZBUS_MSG_SUBSCRIBER */
+
+	return last_error;
+}
+
+#endif /* CONFIG_ZBUS_RUNTIME_OBSERVERS */
+
+static inline int _zbus_notify_subscribers(const struct zbus_channel *chan, uint64_t end_ticks)
+{
+	__ASSERT(chan != NULL, "chan is required");
+
+	int last_error = 0, err;
+
+	struct zbus_channel_observation *observation;
+
+	for (int i = *chan->observers_start_idx, limit = *chan->observers_end_idx; i < limit; ++i) {
+		STRUCT_SECTION_GET(zbus_channel_observation, i, &observation);
+
+		if (observation->obs->enabled && (observation->obs->notification_queue != NULL)) {
+			err = k_msgq_put(observation->obs->notification_queue, &chan,
 					 _zbus_timeout_remainder(end_ticks));
 
 			_ZBUS_ASSERT(err == 0,
 				     "could not deliver notification to observer %s. Error code %d",
-				     _ZBUS_OBS_NAME(obs_nd->obs), err);
+				     _ZBUS_OBS_NAME(observation->obs), err);
 
 			if (err) {
 				last_error = err;
@@ -91,74 +180,79 @@ static inline int _zbus_notify_subscribers(const struct zbus_channel *chan, uint
 		}
 	}
 
+#if defined(CONFIG_ZBUS_RUNTIME_OBSERVERS)
+	last_error = _zbus_notify_runtime_observers(chan, end_ticks);
+#endif /* CONFIG_ZBUS_RUNTIME_OBSERVERS */
+
 	return last_error;
-}
-
-static void _zbus_observer_priority_set(const struct zbus_observer *obs, int prio)
-{
-	__ASSERT(obs != NULL, "obs is required");
-
-	if (*obs->priority && *obs->priority > prio) {
-		*obs->priority = prio;
-	}
 }
 
 static void _zbus_chan_highest_priority_observer_update(const struct zbus_channel *chan)
 {
 	__ASSERT(chan != NULL, "chan is required");
 
-	struct zbus_observer_node *obs_nd, *tmp;
+	struct zbus_channel_observation *observation;
 
-	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(chan->observers, obs_nd, tmp, node) {
+	*chan->highest_observer_priority = K_LOWEST_APPLICATION_THREAD_PRIO;
 
-		__ASSERT(obs_nd != NULL, "observer node is NULL");
+	for (int16_t i = *chan->observers_start_idx, limit = *chan->observers_end_idx; i < limit;
+	     ++i) {
+		STRUCT_SECTION_GET(zbus_channel_observation, i, &observation);
 
-		if (obs_nd->obs->enabled && (obs_nd->obs->priority > 0)) {
-			if (*chan->highest_observer_priority > *obs_nd->obs->priority) {
-				*chan->highest_observer_priority = *obs_nd->obs->priority;
+		if (observation->obs->enabled && (observation->obs->priority > 0)) {
+			if (*chan->highest_observer_priority > *observation->obs->priority) {
+				*chan->highest_observer_priority = *observation->obs->priority;
 			}
 		}
 	}
 }
 
-static int _zbus_chan_smart_lock(const struct zbus_channel *chan, k_timeout_t timeout, int *prio)
+static inline int _zbus_chan_smart_lock(const struct zbus_channel *chan, k_timeout_t timeout,
+					int *prio)
 {
 	if (k_is_in_isr()) {
 		return k_sem_take(chan->sem, K_NO_WAIT);
-	}
+	} else if (IS_ENABLED(CONFIG_ZBUS_SMART_LOCK)) {
+		int current_thread_priority = k_thread_priority_get(k_current_get());
 
-	int current_thread_priority = k_thread_priority_get(k_current_get());
+		if (current_thread_priority > *chan->highest_observer_priority) {
+			*prio = current_thread_priority;
 
-	_zbus_chan_highest_priority_observer_update(chan);
+			int p = *chan->highest_observer_priority - 1;
 
-	if (current_thread_priority > *chan->highest_observer_priority) {
-		*prio = current_thread_priority;
+			LOG_DBG("Elevating publisher priority from %d to %d",
+				current_thread_priority, MAX(p, 0));
 
-		LOG_DBG("Elevating publisher priority from %d to %d", current_thread_priority,
-			*chan->highest_observer_priority);
-		int p = *chan->highest_observer_priority - 1;
-		k_thread_priority_set(k_current_get(), MAX(p, 0));
-	}
+			k_thread_priority_set(k_current_get(), MAX(p, 0));
+		} else {
+			*prio = -1;
+		}
 
-	int err = k_sem_take(chan->sem, timeout);
-	if (err) {
-		LOG_ERR("Something went wrong. Restoring publisher priority");
+		int err = k_sem_take(chan->sem, timeout);
+		if (err) {
+			LOG_ERR("Something went wrong. Restoring publisher priority");
 
-		k_thread_priority_set(k_current_get(), current_thread_priority);
+			k_thread_priority_set(k_current_get(), current_thread_priority);
 
-		return err;
+			return err;
+		}
+	} else {
+		return k_sem_take(chan->sem, timeout);
 	}
 
 	return 0;
 }
 
-static void _zbus_chan_smart_unlock(const struct zbus_channel *chan, int prio)
+static inline void _zbus_chan_smart_unlock(const struct zbus_channel *chan, int prio)
 {
 	k_sem_give(chan->sem);
 
-	if (!k_is_in_isr()) {
+	if (IS_ENABLED(CONFIG_ZBUS_SMART_LOCK) && !k_is_in_isr() && prio >= 0) {
+		__ASSERT_NO_MSG((k_thread_priority_get(k_current_get()) + 1) ==
+				*chan->highest_observer_priority);
+
 		LOG_DBG("Restoring publisher priority from %d to %d",
-			*chan->highest_observer_priority, prio);
+			k_thread_priority_get(k_current_get()), prio);
 
 		k_thread_priority_set(k_current_get(), prio);
 	}
@@ -181,7 +275,7 @@ int zbus_chan_pub(const struct zbus_channel *chan, const void *msg, k_timeout_t 
 		return -ENOMSG;
 	}
 
-	int context_priority = CONFIG_NUM_PREEMPT_PRIORITIES - 1;
+	int context_priority = K_LOWEST_APPLICATION_THREAD_PRIO;
 
 	err = _zbus_chan_smart_lock(chan, timeout, &context_priority);
 	if (err) {
@@ -230,7 +324,7 @@ int zbus_chan_notify(const struct zbus_channel *chan, k_timeout_t timeout)
 
 	uint64_t end_ticks = sys_clock_timeout_end_calc(timeout);
 
-	int context_priority = CONFIG_NUM_PREEMPT_PRIORITIES - 1;
+	int context_priority = K_LOWEST_APPLICATION_THREAD_PRIO;
 
 	err = _zbus_chan_smart_lock(chan, timeout, &context_priority);
 	if (err) {
@@ -273,8 +367,6 @@ int zbus_sub_wait(const struct zbus_observer *sub, const struct zbus_channel **c
 	_ZBUS_ASSERT(sub != NULL, "sub is required");
 	_ZBUS_ASSERT(chan != NULL, "chan is required");
 
-	_zbus_observer_priority_set(sub, k_thread_priority_get(k_current_get()));
-
 	if (sub->notification_queue == NULL) {
 		return -EINVAL;
 	}
@@ -291,8 +383,6 @@ int zbus_sub_wait_msg(const struct zbus_observer *sub, const struct zbus_channel
 	_ZBUS_ASSERT(sub != NULL, "sub is required");
 	_ZBUS_ASSERT(chan != NULL, "chan is required");
 	_ZBUS_ASSERT(msg != NULL, "msg is required");
-
-	_zbus_observer_priority_set(sub, k_thread_priority_get(k_current_get()));
 
 	if (sub->message_fifo == NULL) {
 		return -EINVAL;
@@ -320,3 +410,40 @@ int zbus_sub_wait_msg(const struct zbus_observer *sub, const struct zbus_channel
 }
 
 #endif /* CONFIG_ZBUS_MSG_SUBSCRIBER */
+
+#if defined(CONFIG_ZBUS_SMART_LOCK)
+int zbus_obs_thread_attach(const struct zbus_observer *obs)
+{
+	int prio = k_thread_priority_get(k_current_get());
+
+	_ZBUS_ASSERT(!k_is_in_isr(), "zbus subscribers cannot be used inside ISRs");
+	_ZBUS_ASSERT(obs != NULL, "obs is required");
+
+	if (*obs->priority && *obs->priority > prio) {
+		*obs->priority = prio;
+	}
+
+	STRUCT_SECTION_FOREACH(zbus_channel_observation, observation) {
+		if (observation->obs == obs) {
+			_zbus_chan_highest_priority_observer_update(observation->chan);
+		}
+	}
+
+	return 0;
+}
+#endif /* CONFIG_ZBUS_SMART_LOCK */
+
+int zbus_obs_set_enable(struct zbus_observer *obs, bool enabled)
+{
+	_ZBUS_ASSERT(obs != NULL, "obs is required");
+
+	obs->enabled = enabled;
+
+	STRUCT_SECTION_FOREACH(zbus_channel_observation, observation) {
+		if (observation->obs == obs) {
+			_zbus_chan_highest_priority_observer_update(observation->chan);
+		}
+	}
+
+	return 0;
+}

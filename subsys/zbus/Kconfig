@@ -8,6 +8,13 @@ menuconfig ZBUS
 
 if ZBUS
 
+config ZBUS_SMART_LOCK
+	bool "Smart lock support."
+	default y
+	help
+	  The smart lock feature consider the observers priority to elevate the
+	  publisher priority to avoid priority inversion and other concurrency issues.
+
 config ZBUS_CHANNELS_SYS_INIT_PRIORITY
 	default 5
 	int "The priority used during the SYS_INIT procedure."
@@ -36,14 +43,9 @@ config ZBUS_CHANNEL_NAME
 config ZBUS_OBSERVER_NAME
 	bool "Observer name field"
 
-config ZBUS_RUNTIME_OBSERVERS_POOL_SIZE
-	int "The size of the runtime observers pool."
-	default 0
-	help
-	  When the size is bigger than zero this feature will be enabled. It applies the Object Pool Pattern,
-	  where the objects in the pool are pre-allocated and can be used and recycled after use. The
-	  technique avoids dynamic allocation and allows the code to increase the number of observers by
-	  only changing a configuration.
+config ZBUS_RUNTIME_OBSERVERS
+	bool "Runtime observers support."
+	default n
 
 config ZBUS_ASSERT_MOCK
 	bool "Zbus assert mock for test purposes."

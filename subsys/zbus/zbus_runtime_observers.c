@@ -8,20 +8,11 @@
 
 LOG_MODULE_DECLARE(zbus, CONFIG_ZBUS_LOG_LEVEL);
 
-K_MEM_SLAB_DEFINE_STATIC(_zbus_runtime_obs_pool, sizeof(struct zbus_observer_node),
-			 CONFIG_ZBUS_RUNTIME_OBSERVERS_POOL_SIZE, 4);
-
-struct k_mem_slab *zbus_runtime_obs_pool(void)
-{
-	return &_zbus_runtime_obs_pool;
-}
-
 int zbus_chan_add_obs(const struct zbus_channel *chan, const struct zbus_observer *obs,
 		      k_timeout_t timeout)
 {
 	int err;
 	struct zbus_observer_node *obs_nd, *tmp;
-	uint64_t end_ticks = sys_clock_timeout_end_calc(timeout);
 
 	_ZBUS_ASSERT(!k_is_in_isr(), "ISR blocked");
 	_ZBUS_ASSERT(chan != NULL, "chan is required");
@@ -41,10 +32,8 @@ int zbus_chan_add_obs(const struct zbus_channel *chan, const struct zbus_observe
 		}
 	}
 
-	err = k_mem_slab_alloc(&_zbus_runtime_obs_pool, (void **)&obs_nd,
-			       _zbus_timeout_remainder(end_ticks));
-
-	if (err) {
+	struct zbus_observer_node *new_obs_nd = k_malloc(sizeof(struct zbus_observer_node));
+	if (new_obs_nd == NULL) {
 		LOG_ERR("Could not allocate memory on runtime observers pool\n");
 
 		k_sem_give(chan->sem);
@@ -52,9 +41,9 @@ int zbus_chan_add_obs(const struct zbus_channel *chan, const struct zbus_observe
 		return err;
 	}
 
-	obs_nd->obs = obs;
+	new_obs_nd->obs = obs;
 
-	sys_slist_append(chan->observers, &obs_nd->node);
+	sys_slist_append(chan->observers, &new_obs_nd->node);
 
 	k_sem_give(chan->sem);
 
@@ -81,7 +70,7 @@ int zbus_chan_rm_obs(const struct zbus_channel *chan, const struct zbus_observer
 		if (obs_nd->obs == obs) {
 			sys_slist_remove(chan->observers, &prev_obs_nd->node, &obs_nd->node);
 
-			k_mem_slab_free(&_zbus_runtime_obs_pool, (void **)&obs_nd);
+			k_free(obs_nd);
 
 			k_sem_give(chan->sem);
 
