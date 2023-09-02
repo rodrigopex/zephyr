@@ -18,6 +18,18 @@ config ZBUS_CHANNEL_NAME
 config ZBUS_OBSERVER_NAME
 	bool "Observer name field"
 
+config ZBUS_MSG_SUBSCRIBER
+	select NET_BUF
+	bool "Message subscribers will receive all messages in sequence."
+
+if ZBUS_MSG_SUBSCRIBER
+
+config ZBUS_MSG_SUBSCRIBER_NET_BUF_POOL_SIZE
+	default 16
+	int "The count of net_buf available to be used simutaneously."
+
+endif # ZBUS_MSG_SUBSCRIBER
+
 config ZBUS_RUNTIME_OBSERVERS
 	bool "Runtime observers support."
 	default n
