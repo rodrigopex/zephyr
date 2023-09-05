@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include <stdint.h>
 #include <zephyr/kernel.h>
 #include <zephyr/init.h>
 #include <zephyr/sys/iterable_sections.h>
@@ -41,7 +42,7 @@ int _zbus_init(void)
 		++(curr->data->observers_end_idx);
 	}
 	STRUCT_SECTION_FOREACH(zbus_channel, chan) {
-		k_mutex_init(&chan->data->mutex);
+		k_sem_init(&chan->data->sem, 1, 1);
 
 #if defined(CONFIG_ZBUS_RUNTIME_OBSERVERS)
 		sys_slist_init(&chan->data->observers);
@@ -119,7 +120,7 @@ static inline int _zbus_vded_exec(const struct zbus_channel *chan, k_timepoint_t
 
 		const struct zbus_observer *obs = observation->obs;
 
-		if (!obs->enabled || observation_mask->enabled) {
+		if (!obs->data->enabled || observation_mask->enabled) {
 			continue;
 		}
 
@@ -147,7 +148,7 @@ static inline int _zbus_vded_exec(const struct zbus_channel *chan, k_timepoint_t
 
 		const struct zbus_observer *obs = obs_nd->obs;
 
-		if (!obs->enabled) {
+		if (!obs->data->enabled) {
 			continue;
 		}
 
@@ -164,13 +165,95 @@ static inline int _zbus_vded_exec(const struct zbus_channel *chan, k_timepoint_t
 	return last_error;
 }
 
+static inline void _zbus_chan_highest_priority_observer_update(const struct zbus_observer *obs)
+{
+	struct zbus_channel_observation *observation;
+
+	int count;
+
+	STRUCT_SECTION_COUNT(zbus_channel_observation, &count);
+
+	for (int16_t i = 0; i < count; ++i) {
+		STRUCT_SECTION_GET(zbus_channel_observation, i, &observation);
+
+		__ASSERT(observation != NULL, "observation must be not NULL");
+
+		const struct zbus_channel *chan = observation->chan;
+
+		if (obs != observation->obs) {
+			continue;
+		}
+		if (obs->data->priority > 0) {
+			if (chan->data->highest_observer_priority > obs->data->priority) {
+				chan->data->highest_observer_priority = obs->data->priority;
+			}
+		}
+	}
+}
+
+static void _zbus_observer_priority_set(const struct zbus_observer *obs, int8_t prio)
+{
+	__ASSERT(obs != NULL, "obs is required");
+
+	if (obs->data->priority > prio) {
+		obs->data->priority = prio;
+		_zbus_chan_highest_priority_observer_update(obs);
+	}
+}
+
+static int _zbus_chan_lock(const struct zbus_channel *chan, k_timeout_t timeout, int *prio)
+{
+	if (k_is_in_isr()) {
+		return k_sem_take(&chan->data->sem, K_NO_WAIT);
+	}
+
+	int current_thread_priority = k_thread_priority_get(k_current_get());
+
+	if (current_thread_priority > chan->data->highest_observer_priority) {
+		*prio = current_thread_priority;
+
+		LOG_DBG("Elevating publisher priority from %d to %d", current_thread_priority,
+			chan->data->highest_observer_priority);
+
+		int p = chan->data->highest_observer_priority - 1;
+
+		k_thread_priority_set(k_current_get(), MAX(p, 0));
+	}
+
+	int err = k_sem_take(&chan->data->sem, timeout);
+
+	if (err) {
+		LOG_ERR("Something went wrong. Restoring publisher priority");
+
+		k_thread_priority_set(k_current_get(), current_thread_priority);
+
+		return err;
+	}
+
+	return 0;
+}
+
+static void _zbus_chan_unlock(const struct zbus_channel *chan, int prio)
+{
+	k_sem_give(&chan->data->sem);
+
+	if (!k_is_in_isr()) {
+		LOG_DBG("Restoring publisher priority from %d to %d",
+			chan->data->highest_observer_priority, prio);
+
+		k_thread_priority_set(k_current_get(), prio);
+	}
+}
 int zbus_chan_pub(const struct zbus_channel *chan, const void *msg, k_timeout_t timeout)
 {
 	int err;
 
-	_ZBUS_ASSERT(!k_is_in_isr(), "zbus cannot be used inside ISRs");
 	_ZBUS_ASSERT(chan != NULL, "chan is required");
 	_ZBUS_ASSERT(msg != NULL, "msg is required");
+
+	if (k_is_in_isr()) {
+		timeout = K_NO_WAIT;
+	}
 
 	k_timepoint_t end_time = sys_timepoint_calc(timeout);
 
@@ -178,7 +261,9 @@ int zbus_chan_pub(const struct zbus_channel *chan, const void *msg, k_timeout_t 
 		return -ENOMSG;
 	}
 
-	err = k_mutex_lock(&chan->data->mutex, timeout);
+	int context_priority = CONFIG_NUM_PREEMPT_PRIORITIES - 1;
+
+	err = _zbus_chan_lock(chan, timeout, &context_priority);
 	if (err) {
 		return err;
 	}
@@ -187,7 +272,7 @@ int zbus_chan_pub(const struct zbus_channel *chan, const void *msg, k_timeout_t 
 
 	err = _zbus_vded_exec(chan, end_time);
 
-	k_mutex_unlock(&chan->data->mutex);
+	_zbus_chan_unlock(chan, context_priority);
 
 	return err;
 }
@@ -196,47 +281,62 @@ int zbus_chan_read(const struct zbus_channel *chan, void *msg, k_timeout_t timeo
 {
 	int err;
 
-	_ZBUS_ASSERT(!k_is_in_isr(), "zbus cannot be used inside ISRs");
 	_ZBUS_ASSERT(chan != NULL, "chan is required");
 	_ZBUS_ASSERT(msg != NULL, "msg is required");
 
-	err = k_mutex_lock(&chan->data->mutex, timeout);
+	if (k_is_in_isr()) {
+		timeout = K_NO_WAIT;
+	}
+
+	int context_priority = CONFIG_NUM_PREEMPT_PRIORITIES - 1;
+
+	err = _zbus_chan_lock(chan, timeout, &context_priority);
 	if (err) {
 		return err;
 	}
 
 	memcpy(msg, chan->message, chan->message_size);
 
-	return k_mutex_unlock(&chan->data->mutex);
+	k_sem_give(&chan->data->sem);
+
+	return 0;
 }
 
 int zbus_chan_notify(const struct zbus_channel *chan, k_timeout_t timeout)
 {
 	int err;
 
-	_ZBUS_ASSERT(!k_is_in_isr(), "zbus cannot be used inside ISRs");
 	_ZBUS_ASSERT(chan != NULL, "chan is required");
+
+	if (k_is_in_isr()) {
+		timeout = K_NO_WAIT;
+	}
 
 	k_timepoint_t end_time = sys_timepoint_calc(timeout);
 
-	err = k_mutex_lock(&chan->data->mutex, timeout);
+	int context_priority = CONFIG_NUM_PREEMPT_PRIORITIES - 1;
+
+	err = _zbus_chan_lock(chan, timeout, &context_priority);
 	if (err) {
 		return err;
 	}
 
 	err = _zbus_vded_exec(chan, end_time);
 
-	k_mutex_unlock(&chan->data->mutex);
+	_zbus_chan_unlock(chan, context_priority);
 
 	return err;
 }
 
 int zbus_chan_claim(const struct zbus_channel *chan, k_timeout_t timeout)
 {
-	_ZBUS_ASSERT(!k_is_in_isr(), "zbus cannot be used inside ISRs");
 	_ZBUS_ASSERT(chan != NULL, "chan is required");
 
-	int err = k_mutex_lock(&chan->data->mutex, timeout);
+	if (k_is_in_isr()) {
+		timeout = K_NO_WAIT;
+	}
+
+	int err = k_sem_take(&chan->data->sem, timeout);
 
 	if (err) {
 		return err;
@@ -247,12 +347,11 @@ int zbus_chan_claim(const struct zbus_channel *chan, k_timeout_t timeout)
 
 int zbus_chan_finish(const struct zbus_channel *chan)
 {
-	_ZBUS_ASSERT(!k_is_in_isr(), "zbus cannot be used inside ISRs");
 	_ZBUS_ASSERT(chan != NULL, "chan is required");
 
-	int err = k_mutex_unlock(&chan->data->mutex);
+	k_sem_give(&chan->data->sem);
 
-	return err;
+	return 0;
 }
 
 int zbus_sub_wait(const struct zbus_observer *sub, const struct zbus_channel **chan,
@@ -263,6 +362,8 @@ int zbus_sub_wait(const struct zbus_observer *sub, const struct zbus_channel **c
 	_ZBUS_ASSERT(sub->type == ZBUS_OBSERVER_SUBSCRIBER_TYPE, "sub must be a SUBSCRIBER");
 	_ZBUS_ASSERT(sub->queue != NULL, "sub queue is required");
 	_ZBUS_ASSERT(chan != NULL, "chan is required");
+
+	_zbus_observer_priority_set(sub, k_thread_priority_get(k_current_get()));
 
 	return k_msgq_get(sub->queue, chan, timeout);
 }
@@ -279,6 +380,8 @@ int zbus_sub_wait_msg(const struct zbus_observer *sub, const struct zbus_channel
 	_ZBUS_ASSERT(sub->message_fifo != NULL, "sub message_fifo is required");
 	_ZBUS_ASSERT(chan != NULL, "chan is required");
 	_ZBUS_ASSERT(msg != NULL, "msg is required");
+
+	_zbus_observer_priority_set(sub, k_thread_priority_get(k_current_get()));
 
 	struct net_buf *buf = net_buf_get(sub->message_fifo, timeout);
 

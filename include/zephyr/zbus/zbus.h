@@ -6,6 +6,7 @@
 #ifndef ZEPHYR_INCLUDE_ZBUS_H_
 #define ZEPHYR_INCLUDE_ZBUS_H_
 
+#include <stdint.h>
 #include <string.h>
 
 #include <zephyr/kernel.h>
@@ -38,10 +39,15 @@ struct zbus_channel_data {
 	 */
 	int16_t observers_end_idx;
 
-	/** Access control mutex. Points to the mutex used to avoid race conditions
+	/** Access control semaphore. Points to the mutex used to avoid race conditions
 	 * for accessing the channel.
 	 */
-	struct k_mutex mutex;
+	struct k_sem sem;
+
+	/** Highest observer priority. Indicates the priority that the VDED will use to boost the
+	 * notification process avoiding preemptions.
+	 */
+	int8_t highest_observer_priority;
 
 #if defined(CONFIG_ZBUS_RUNTIME_OBSERVERS) || defined(__DOXYGEN__)
 	/** Channel observer list. Represents the channel's observers list, it can be empty
@@ -96,6 +102,14 @@ enum __packed zbus_observer_type {
 	ZBUS_OBSERVER_MSG_SUBSCRIBER_TYPE
 };
 
+struct zbus_observer_data {
+	/** Enabled flag. Indicates if observer is receiving notification. */
+	bool enabled;
+
+	/** Subscriber attached thread priority. */
+	int8_t priority;
+};
+
 /**
  * @brief Type used to represent an observer.
  *
@@ -119,8 +133,8 @@ struct zbus_observer {
 	/** Type indication. */
 	enum zbus_observer_type type;
 
-	/** Enabled flag. Indicates if observer is receiving notification. */
-	bool enabled;
+	/** Mutable observer data struct. */
+	struct zbus_observer_data *const data;
 
 	union {
 		/** Observer message queue. It turns the observer into a subscriber. */
@@ -301,8 +315,9 @@ k_timeout_t _zbus_timeout_remainder(uint64_t end_ticks);
 #define ZBUS_CHAN_DEFINE(_name, _type, _validator, _user_data, _observers, _init_val)              \
 	static _type _CONCAT(_zbus_message_, _name) = _init_val;                                   \
 	static struct zbus_channel_data _CONCAT(_zbus_chan_data_, _name) = {                       \
-		.observers_start_idx = -1, .observers_end_idx = -1};                               \
-	static K_MUTEX_DEFINE(_CONCAT(_zbus_mutex_, _name));                                       \
+		.observers_start_idx = -1,                                                         \
+		.observers_end_idx = -1,                                                           \
+		.highest_observer_priority = CONFIG_NUM_PREEMPT_PRIORITIES - 1};                   \
 	const STRUCT_SECTION_ITERABLE(zbus_channel, _name) = {                                     \
 		ZBUS_CHANNEL_NAME_INIT(_name) /* Maybe removed */                                  \
 			.message = &_CONCAT(_zbus_message_, _name),                                \
@@ -341,10 +356,12 @@ k_timeout_t _zbus_timeout_remainder(uint64_t end_ticks);
 #define ZBUS_SUBSCRIBER_DEFINE_WITH_ENABLE(_name, _queue_size, _enable)                            \
 	K_MSGQ_DEFINE(_zbus_observer_queue_##_name, sizeof(const struct zbus_channel *),           \
 		      _queue_size, sizeof(const struct zbus_channel *));                           \
+	static struct zbus_observer_data _CONCAT(_zbus_obs_data_, _name) = {                       \
+		.enabled = _enable, .priority = CONFIG_NUM_PREEMPT_PRIORITIES - 1};                \
 	STRUCT_SECTION_ITERABLE(zbus_observer, _name) = {                                          \
 		ZBUS_OBSERVER_NAME_INIT(_name) /* Name field */                                    \
 			.type = ZBUS_OBSERVER_SUBSCRIBER_TYPE,                                     \
-		.enabled = _enable, .queue = &_zbus_observer_queue_##_name}
+		.data = &_CONCAT(_zbus_obs_data_, _name), .queue = &_zbus_observer_queue_##_name}
 /**
  * @brief Define and initialize a subscriber.
  *
@@ -371,10 +388,12 @@ k_timeout_t _zbus_timeout_remainder(uint64_t end_ticks);
  * @param[in] _enable The listener initial enable state.
  */
 #define ZBUS_LISTENER_DEFINE_WITH_ENABLE(_name, _cb, _enable)                                      \
-	STRUCT_SECTION_ITERABLE(zbus_observer,                                                     \
-				_name) = {ZBUS_OBSERVER_NAME_INIT(_name) /* Name field */          \
-						  .type = ZBUS_OBSERVER_LISTENER_TYPE,             \
-					  .enabled = _enable, .callback = (_cb)}
+	static struct zbus_observer_data _CONCAT(_zbus_obs_data_, _name) = {                       \
+		.enabled = _enable, .priority = CONFIG_NUM_PREEMPT_PRIORITIES - 1};                \
+	STRUCT_SECTION_ITERABLE(zbus_observer, _name) = {                                          \
+		ZBUS_OBSERVER_NAME_INIT(_name) /* Name field */                                    \
+			.type = ZBUS_OBSERVER_LISTENER_TYPE,                                       \
+		.data = &_CONCAT(_zbus_obs_data_, _name), .callback = (_cb)}
 /**
  * @brief Define and initialize a listener.
  *
@@ -399,10 +418,12 @@ k_timeout_t _zbus_timeout_remainder(uint64_t end_ticks);
  */
 #define ZBUS_MSG_SUBSCRIBER_DEFINE_WITH_ENABLE(_name, _enable)                                     \
 	static K_FIFO_DEFINE(_zbus_observer_fifo_##_name);                                         \
+	static struct zbus_observer_data _CONCAT(_zbus_obs_data_, _name) = {                       \
+		.enabled = _enable, .priority = CONFIG_NUM_PREEMPT_PRIORITIES - 1};                \
 	STRUCT_SECTION_ITERABLE(zbus_observer, _name) = {                                          \
 		ZBUS_OBSERVER_NAME_INIT(_name) /* Name field */                                    \
 			.type = ZBUS_OBSERVER_MSG_SUBSCRIBER_TYPE,                                 \
-		.enabled = _enable,                                                                \
+		.data = &_CONCAT(_zbus_obs_data_, _name),                                          \
 		.message_fifo = &_zbus_observer_fifo_##_name,                                      \
 	}
 
@@ -682,7 +703,7 @@ static inline int zbus_obs_set_enable(struct zbus_observer *obs, bool enabled)
 {
 	_ZBUS_ASSERT(obs != NULL, "obs is required");
 
-	obs->enabled = enabled;
+	obs->data->enabled = enabled;
 
 	return 0;
 }
@@ -702,7 +723,7 @@ static inline int zbus_obs_is_enabled(struct zbus_observer *obs, bool *enable)
 	_ZBUS_ASSERT(obs != NULL, "obs is required");
 	_ZBUS_ASSERT(enable != NULL, "enable is required");
 
-	*enable = obs->enabled;
+	*enable = obs->data->enabled;
 
 	return 0;
 }
