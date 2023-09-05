@@ -226,10 +226,12 @@ ZBUS_SUBSCRIBER_DEFINE(sub1, 1);
 ZBUS_MSG_SUBSCRIBER_DEFINE_WITH_ENABLE(foo_msg_sub, false);
 ZBUS_MSG_SUBSCRIBER_DEFINE_WITH_ENABLE(foo2_msg_sub, false);
 static K_FIFO_DEFINE(_zbus_observer_fifo_invalid_obs);
+static struct zbus_observer_data _zbus_obs_data_invalid_obs = {
+	.enabled = false, .priority = CONFIG_NUM_PREEMPT_PRIORITIES - 1};
 STRUCT_SECTION_ITERABLE(zbus_observer, invalid_obs) = {
 	ZBUS_OBSERVER_NAME_INIT(invalid_obs) /* Name field */
 		.type = ZBUS_OBSERVER_MSG_SUBSCRIBER_TYPE + 10,
-	.enabled = false,
+	.data = &_zbus_obs_data_invalid_obs,
 	.message_fifo = &_zbus_observer_fifo_invalid_obs,
 };
 
@@ -285,11 +287,11 @@ ZTEST(basic, test_specification_based__zbus_chan)
 
 	k_msleep(100);
 
-	zassert_equal(0, zbus_chan_pub(&aux2_chan, &a, K_NO_WAIT), "It must not be valid");
+	zassert_equal(-EBUSY, zbus_chan_pub(&aux2_chan, &a, K_NO_WAIT), "It must not be valid");
 
-	zassert_equal(0, zbus_chan_read(&aux2_chan, &a, K_NO_WAIT), "It must not be valid");
+	zassert_equal(-EBUSY, zbus_chan_read(&aux2_chan, &a, K_NO_WAIT), "It must not be valid");
 
-	zassert_equal(0, zbus_chan_notify(&aux2_chan, K_NO_WAIT), "It must not be invalid");
+	zassert_equal(-EBUSY, zbus_chan_notify(&aux2_chan, K_NO_WAIT), "It must not be invalid");
 
 	zassert_equal(0, zbus_chan_finish(&aux2_chan), "It must finish correctly");
 
@@ -326,15 +328,15 @@ ZTEST(basic, test_specification_based__zbus_chan)
 		      "the msgq");
 
 	/* Trying to call the zbus functions in a ISR context. None must work */
-	ISR_OP(PUB_ISR, -EFAULT);
-	ISR_OP(PUB_ISR_INVAL, -EFAULT);
-	ISR_OP(READ_ISR, -EFAULT);
-	ISR_OP(READ_ISR_INVAL, -EFAULT);
-	ISR_OP(NOTIFY_ISR, -EFAULT);
-	ISR_OP(NOTIFY_ISR_INVAL, -EFAULT);
-	ISR_OP(CLAIM_ISR, -EFAULT);
-	ISR_OP(CLAIM_ISR_INVAL, -EFAULT);
-	ISR_OP(FINISH_ISR, -EFAULT);
+	ISR_OP(PUB_ISR, 0);
+	ISR_OP(PUB_ISR_INVAL, 0);
+	ISR_OP(READ_ISR, 0);
+	ISR_OP(READ_ISR_INVAL, 0);
+	ISR_OP(NOTIFY_ISR, 0);
+	ISR_OP(NOTIFY_ISR_INVAL, 0);
+	ISR_OP(CLAIM_ISR, 0);
+	ISR_OP(FINISH_ISR, 0);
+	ISR_OP(CLAIM_ISR_INVAL, 0);
 	ISR_OP(FINISH_ISR_INVAL, -EFAULT);
 	ISR_OP(ADD_OBS_ISR, -EFAULT);
 	ISR_OP(ADD_OBS_ISR_INVAL, -EFAULT);
@@ -702,10 +704,12 @@ ZTEST(basic, test_specification_based__zbus_obs_set_chan_notification_mask)
 
 ZBUS_SUBSCRIBER_DEFINE(foo_sub, 1);
 
+static struct zbus_observer_data _zbus_obs_data_invalid_sub = {
+	.enabled = false, .priority = CONFIG_NUM_PREEMPT_PRIORITIES - 1};
 STRUCT_SECTION_ITERABLE(zbus_observer,
 			invalid_sub) = {ZBUS_OBSERVER_NAME_INIT(invalid_sub) /* Name field */
 						.type = ZBUS_OBSERVER_SUBSCRIBER_TYPE,
-					.enabled = false, .queue = NULL};
+					.data = &_zbus_obs_data_invalid_sub, .queue = NULL};
 static void isr_sub_wait(const void *operation)
 {
 	const struct zbus_channel *chan;
