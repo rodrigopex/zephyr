@@ -49,16 +49,9 @@ void trigger_timer_handler(struct k_timer *dummy)
 
 K_TIMER_DEFINE(trigger_timer, trigger_timer_handler, NULL);
 
-int mock_observers_init(void)
-{
-	/* Adding a mock for testing the current status of the system */
-	zbus_chan_add_obs(&sensor_data_chan, &mock_lis, K_NO_WAIT);
-	zbus_chan_add_obs(&payload_chan, &mock_lis, K_NO_WAIT);
-	zbus_chan_add_obs(&transmission_done_chan, &mock_lis, K_NO_WAIT);
-	return 0;
-}
-
-SYS_INIT(mock_observers_init, APPLICATION, 0);
+ZBUS_CHAN_ADD_OBS(sensor_data_chan, mock_lis, 3);
+ZBUS_CHAN_ADD_OBS(payload_chan, mock_lis, 3);
+ZBUS_CHAN_ADD_OBS(transmission_done_chan, mock_lis, 3);
 
 int main(void)
 {

@@ -26,23 +26,18 @@ void core_listener_callback(const struct zbus_channel *chan)
 
 ZBUS_LISTENER_DEFINE(core_lis, core_listener_callback);
 
-int core_listener_init(void)
-{
-	return zbus_chan_add_obs(&sensor_data_chan, &core_lis, K_NO_WAIT);
-}
-
-SYS_INIT(core_listener_init, APPLICATION, 3);
+ZBUS_CHAN_ADD_OBS(sensor_data_chan, core_lis, 3);
 
 #else
 
 ZBUS_SUBSCRIBER_DEFINE(core_thread_sub, 4);
 
+ZBUS_CHAN_ADD_OBS(sensor_data_chan, core_thread_sub, 3);
+ZBUS_CHAN_ADD_OBS(transmission_done_chan, core_thread_sub, 3);
+
 void core_thread()
 {
 	LOG_INF("Core thread started!");
-
-	zbus_chan_add_obs(&sensor_data_chan, &core_thread_sub, K_NO_WAIT);
-	zbus_chan_add_obs(&transmission_done_chan, &core_thread_sub, K_NO_WAIT);
 
 	const struct zbus_channel *chan;
 
