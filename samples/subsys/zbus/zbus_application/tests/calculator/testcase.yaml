@@ -1,0 +1,5 @@
+tests:
+  zbus_application.calculator.test_sum_sub_mul_div:
+    tags: zbus_application
+    integration_platforms:
+      - native_sim
