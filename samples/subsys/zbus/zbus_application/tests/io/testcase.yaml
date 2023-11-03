@@ -1,0 +1,6 @@
+tests:
+  zbus_application.io.test_cmd_generation:
+    platform_allow: m2gl025_miv
+    tags: zbus_application
+    integration_platforms:
+      - native_sim

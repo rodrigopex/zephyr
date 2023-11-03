@@ -1,0 +1,9 @@
+tests:
+  zbus_application.integration.test_calculator_net:
+    platform_allow: m2gl025_miv
+    tags: zbus_application
+    harness: robot
+    harness_config:
+      robot_test_path: integration.robot
+    integration_platforms:
+      - native_sim
