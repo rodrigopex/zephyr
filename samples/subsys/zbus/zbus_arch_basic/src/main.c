@@ -28,23 +28,24 @@ int main(void)
 
 		if (chan == &chan_indicator_event) {
 
-			if (msg.indicator_evt.type == INDICATOR_EVENT_READY) {
+			if (msg.indicator_evt.which_indicator_evt ==
+			    MSG_INDICATOR_EVENT_READY_TAG) {
 				++system_status;
 
-				LOG_INF("Indicator module...[ok]");
+				LOG_INF("Indicator service...[ok]");
 			} else {
-				LOG_WRN("Indicator module...[failed: %d]",
-					msg.indicator_evt.error.code);
+				LOG_WRN("Indicator service...[failed: %d]",
+					msg.indicator_evt.failed.error_code);
 			}
 		} else if (chan == &chan_trigger_event) {
 
-			if (msg.trigger_evt.type == TRIGGER_EVENT_READY) {
+			if (msg.trigger_evt.which_trigger_evt == MSG_TRIGGER_EVENT_READY_TAG) {
 				++system_status;
-				LOG_INF("Trigger module...[ok]");
+				LOG_INF("Trigger service...[ok]");
 
 			} else {
-				LOG_WRN("Trigger module...[failed: %d]\n",
-					msg.indicator_evt.error.code);
+				LOG_WRN("Trigger service...[failed: %d]\n",
+					msg.trigger_evt.failed.error_code);
 			}
 		}
 

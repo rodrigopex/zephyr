@@ -45,10 +45,11 @@ void led_thread(void)
 	int err;
 
 	if (self.led.port && !gpio_is_ready_dt(&self.led)) {
-		zbus_chan_pub(&chan_indicator_event,
-			      MSG_INDICATOR_EVT(.type = INDICATOR_EVENT_FAILED,
-						.error = {.code = -ENODEV}),
-			      K_MSEC(500));
+		zbus_chan_pub(
+			&chan_indicator_event,
+			MSG_INDICATOR_EVT(.which_indicator_evt = MSG_INDICATOR_EVENT_FAILED_TAG,
+					  .failed = {.error_code = -ENODEV}),
+			K_MSEC(500));
 
 		return;
 	}
@@ -57,7 +58,8 @@ void led_thread(void)
 	if (err != 0) {
 		zbus_chan_pub(
 			&chan_indicator_event,
-			MSG_INDICATOR_EVT(.type = INDICATOR_EVENT_FAILED, .error = {.code = err}),
+			MSG_INDICATOR_EVT(.which_indicator_evt = MSG_INDICATOR_EVENT_FAILED_TAG,
+					  .failed = {.error_code = err}),
 			K_MSEC(500));
 
 		return;
@@ -67,7 +69,8 @@ void led_thread(void)
 
 	LOG_INF("Set up LED at %s pin %d", self.led.port->name, self.led.pin);
 
-	zbus_chan_pub(&chan_indicator_event, MSG_INDICATOR_EVT(.type = INDICATOR_EVENT_READY),
+	zbus_chan_pub(&chan_indicator_event,
+		      MSG_INDICATOR_EVT(.which_indicator_evt = MSG_INDICATOR_EVENT_READY_TAG),
 		      K_MSEC(500));
 
 	const struct zbus_channel *chan;
@@ -82,8 +85,8 @@ void led_thread(void)
 	while (1) {
 		zbus_sub_wait_msg(&msub_led_indicator, &chan, &msg, K_FOREVER);
 		if (chan == &chan_trigger_event) {
-			switch (msg.trigger_evt.type) {
-			case TRIGGER_EVENT_ACTIVATED:
+			switch (msg.trigger_evt.which_trigger_evt) {
+			case MSG_TRIGGER_EVENT_ACTIVATED_TAG:
 				pulse();
 				break;
 			default:
@@ -92,45 +95,51 @@ void led_thread(void)
 			}
 
 		} else if (chan == &chan_indicator_command) {
-			switch (msg.indicator_cmd.type) {
-			case INDICATOR_CMD_OFF:
+			switch (msg.indicator_cmd.which_indicator_cmd) {
+			case MSG_INDICATOR_COMMAND_OFF_TAG:
 				self.is_on = false;
 				update_led_state();
 				break;
-			case INDICATOR_CMD_ON:
+			case MSG_INDICATOR_COMMAND_ON_TAG:
 				self.is_on = true;
 				update_led_state();
 				break;
-			case INDICATOR_CMD_TOGGLE:
+			case MSG_INDICATOR_COMMAND_TOGGLE_TAG:
+
 				toggle();
 				break;
-			case INDICATOR_CMD_PULSE:
+			case MSG_INDICATOR_COMMAND_PULSE_TAG:
 				pulse();
 				break;
-			case INDICATOR_CMD_GET_PULSE_DURATION: {
+			case MSG_INDICATOR_COMMAND_GET_PULSE_CONFIG_TAG: {
 				zbus_chan_pub(
 					&chan_indicator_response,
-					MSG_INDICATOR_RSP(.type = INDICATOR_RSP_PULSE_DURATION,
-							  .pulse = {.duration =
-									    self.pulse_duration}),
+					MSG_INDICATOR_RSP(
+							.which_indicator_rsp =
+								MSG_INDICATOR_RESPONSE_PULSE_CONFIG_TAG,
+							.pulse_config =
+								{.duration = self.pulse_duration}),
 					K_MSEC(250));
 				break;
 			}
-			case INDICATOR_CMD_SET_PULSE_DURATION: {
-				self.pulse_duration = msg.indicator_cmd.pulse.duration;
+			case MSG_INDICATOR_COMMAND_SET_PULSE_CONFIG_TAG: {
+				self.pulse_duration = msg.indicator_cmd.set_pulse_config.duration;
 				zbus_chan_pub(
 					&chan_indicator_response,
-					MSG_INDICATOR_RSP(.type = INDICATOR_RSP_PULSE_DURATION,
-							  .pulse = {.duration =
-									    self.pulse_duration}),
+					MSG_INDICATOR_RSP(
+							.which_indicator_rsp =
+								MSG_INDICATOR_RESPONSE_PULSE_CONFIG_TAG,
+							.pulse_config =
+								{.duration = self.pulse_duration}),
 					K_MSEC(250));
 				break;
 			}
 			default:
-				LOG_ERR("Indicator action invalid");
+				LOG_ERR("Indicator action invalid %d",
+					msg.indicator_cmd.which_indicator_cmd);
 			}
 		}
 	}
 }
 
-K_THREAD_DEFINE(led_thread_id, 1024, led_thread, NULL, NULL, NULL, 4, 0, 0);
+K_THREAD_DEFINE(led_thread_id, 2048, led_thread, NULL, NULL, NULL, 4, 0, 0);

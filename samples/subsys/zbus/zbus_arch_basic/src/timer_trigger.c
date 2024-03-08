@@ -9,7 +9,8 @@ struct msg_timer_trigger_settings {
 
 void timer_trigger_handler(struct k_timer *dummy)
 {
-	zbus_chan_pub(&chan_trigger_event, MSG_TRIGGER_EVT(.type = TRIGGER_EVENT_ACTIVATED),
+	zbus_chan_pub(&chan_trigger_event,
+		      MSG_TRIGGER_EVT(.which_trigger_evt = MSG_TRIGGER_EVENT_ACTIVATED_TAG),
 		      K_NO_WAIT);
 }
 
@@ -32,7 +33,8 @@ int timer_trigger_init(void)
 {
 	timer_trigger_timout_lis_callback(&chan_timer_trigger_settings);
 
-	zbus_chan_pub(&chan_trigger_event, MSG_TRIGGER_EVT(.type = TRIGGER_EVENT_READY), K_NO_WAIT);
+	zbus_chan_pub(&chan_trigger_event,
+		      MSG_TRIGGER_EVT(.which_trigger_evt = MSG_TRIGGER_EVENT_READY_TAG), K_NO_WAIT);
 
 	return 0;
 }
