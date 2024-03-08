@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+message MsgIndicatorCmd {
+  message On {}
+
+  message Off {}
+
+  message Toggle {}
+
+  message Pulse {}
+
+  message GetPulseConfig {}
+
+  message SetPulseConfig {
+    uint32 duration = 1;
+  }
+
+  oneof indicator_cmd {
+    On on = 1;
+    Off off = 2;
+    Toggle toggle = 3;
+    Pulse pulse = 4;
+    GetPulseConfig get_pulse_config = 5;
+    SetPulseConfig set_pulse_config = 6;
+  }
+}
+
+message MsgIndicatorRsp {
+  message State {
+    bool is_on = 1;
+  }
+
+  message PulseConfig {
+    uint32 duration = 1;
+  }
+
+  oneof indicator_rsp {
+    State state = 1;
+    PulseConfig pulse_config = 2;
+  }
+}
+
+message MsgIndicatorEvt {
+  message Initiated {}
+
+  message Ready {}
+
+  message Failed {
+    int32 error_code = 1;
+  }
+
+  oneof indicator_evt {
+    Initiated initiated = 1;
+    Ready ready = 2;
+    Failed failed = 3;
+  }
+}
+
+/*
+ * This service interface is only for documenting the service. No code is generated from it.
+ */
+service IndicatorService {
+  rpc on(MsgIndicatorCmd.On) returns (MsgIndicatorRsp.State);
+  rpc off(MsgIndicatorCmd.Off) returns (MsgIndicatorRsp.State);
+  rpc toggle(MsgIndicatorCmd.Toggle) returns (MsgIndicatorRsp.State);
+  rpc pulse(MsgIndicatorCmd.Pulse) returns (MsgIndicatorRsp.State);
+  rpc get_pulse_config(MsgIndicatorCmd.GetPulseConfig) returns (MsgIndicatorRsp.PulseConfig);
+  rpc set_pulse_config(MsgIndicatorCmd.SetPulseConfig) returns (MsgIndicatorRsp.PulseConfig);
+}

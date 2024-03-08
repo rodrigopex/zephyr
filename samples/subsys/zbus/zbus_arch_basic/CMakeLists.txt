@@ -8,13 +8,13 @@ list(APPEND CMAKE_MODULE_PATH ${ZEPHYR_BASE}/modules/nanopb)
 include(nanopb)
 
 set(NANOPB_OPTIONS "--c-style")
-zephyr_nanopb_sources(app include/ifaces/indicator_messages.proto)
-zephyr_nanopb_sources(app include/ifaces/trigger_messages.proto)
+zephyr_nanopb_sources(app include/services/indicator.proto)
+zephyr_nanopb_sources(app include/services/trigger.proto)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/build/include/ifaces)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/build/include/services)
 
-file(GLOB app_sources include/ifaces/*.c)
+file(GLOB app_sources include/services/*.c)
 
 if(CONFIG_BUTTON_TRIGGER)
   list(APPEND app_sources src/button_trigger.c)

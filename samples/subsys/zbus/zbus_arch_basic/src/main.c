@@ -1,7 +1,7 @@
 #include <zephyr/zbus/zbus.h>
 
-#include "ifaces/indicator.h"
-#include "ifaces/trigger.h"
+#include "services/indicator.h"
+#include "services/trigger.h"
 
 #include <zephyr/logging/log.h>
 
@@ -9,16 +9,16 @@ LOG_MODULE_REGISTER(app, CONFIG_APP_LOG_LEVEL);
 
 ZBUS_MSG_SUBSCRIBER_DEFINE(msub_post);
 
-ZBUS_CHAN_ADD_OBS(chan_indicator_event, msub_post, 3);
-ZBUS_CHAN_ADD_OBS(chan_trigger_event, msub_post, 3);
+ZBUS_CHAN_ADD_OBS(chan_indicator_evt, msub_post, 3);
+ZBUS_CHAN_ADD_OBS(chan_trigger_evt, msub_post, 3);
 
 int main(void)
 {
 	int system_status = 0;
 
 	union {
-		struct msg_trigger_event trigger_evt;
-		struct msg_indicator_event indicator_evt;
+		struct msg_trigger_evt trigger_evt;
+		struct msg_indicator_evt indicator_evt;
 	} msg;
 
 	const struct zbus_channel *chan;
@@ -26,10 +26,9 @@ int main(void)
 	while (1) {
 		zbus_sub_wait_msg(&msub_post, &chan, &msg, K_FOREVER);
 
-		if (chan == &chan_indicator_event) {
+		if (chan == &chan_indicator_evt) {
 
-			if (msg.indicator_evt.which_indicator_evt ==
-			    MSG_INDICATOR_EVENT_READY_TAG) {
+			if (msg.indicator_evt.which_indicator_evt == MSG_INDICATOR_EVT_READY_TAG) {
 				++system_status;
 
 				LOG_INF("Indicator service...[ok]");
@@ -37,9 +36,9 @@ int main(void)
 				LOG_WRN("Indicator service...[failed: %d]",
 					msg.indicator_evt.failed.error_code);
 			}
-		} else if (chan == &chan_trigger_event) {
+		} else if (chan == &chan_trigger_evt) {
 
-			if (msg.trigger_evt.which_trigger_evt == MSG_TRIGGER_EVENT_READY_TAG) {
+			if (msg.trigger_evt.which_trigger_evt == MSG_TRIGGER_EVT_READY_TAG) {
 				++system_status;
 				LOG_INF("Trigger service...[ok]");
 

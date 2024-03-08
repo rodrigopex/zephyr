@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<keywordspec name="LibraryNanoServices" type="LIBRARY" format="HTML" scope="TEST" generated="2024-03-12T18:53:00+00:00" specversion="4" source="/home/rodrigopex/Cloud/Projects/zephyrproject/zephyr/samples/subsys/zbus/zbus_arch_basic/LibraryNanoServices.py" lineno="12">
+<version/>
+<doc>&lt;p&gt;Documentation for library &lt;code&gt;LibraryNanoServices&lt;/code&gt;.&lt;/p&gt;</doc>
+<tags>
+</tags>
+<inits>
+<init name="__init__" lineno="13">
+<arguments repr="services=None, services_proto_path=, port=/dev/ttyACM0, baudrate=115200, **kwargs">
+<arg kind="POSITIONAL_OR_NAMED" required="false" repr="services=None">
+<name>services</name>
+<default>None</default>
+</arg>
+<arg kind="POSITIONAL_OR_NAMED" required="false" repr="services_proto_path=">
+<name>services_proto_path</name>
+<default/>
+</arg>
+<arg kind="POSITIONAL_OR_NAMED" required="false" repr="port=/dev/ttyACM0">
+<name>port</name>
+<default>/dev/ttyACM0</default>
+</arg>
+<arg kind="POSITIONAL_OR_NAMED" required="false" repr="baudrate=115200">
+<name>baudrate</name>
+<default>115200</default>
+</arg>
+<arg kind="VAR_NAMED" required="false" repr="**kwargs">
+<name>kwargs</name>
+</arg>
+</arguments>
+<doc>&lt;p&gt;Initialize self.  See help(type(self)) for accurate signature.&lt;/p&gt;</doc>
+<shortdoc>Initialize self.  See help(type(self)) for accurate signature.</shortdoc>
+</init>
+</inits>
+<keywords>
+<kw name="Cleanup" lineno="43">
+<arguments repr="">
+</arguments>
+<doc/>
+<shortdoc/>
+</kw>
+<kw name="Service Execute Command" lineno="46">
+<arguments repr="service_name: str, **kwargs">
+<arg kind="POSITIONAL_OR_NAMED" required="true" repr="service_name: str">
+<name>service_name</name>
+<type typedoc="string">str</type>
+</arg>
+<arg kind="VAR_NAMED" required="false" repr="**kwargs">
+<name>kwargs</name>
+</arg>
+</arguments>
+<doc/>
+<shortdoc/>
+</kw>
+<kw name="Service Wait For Event" lineno="91">
+<arguments repr="service_name: str, **kwargs">
+<arg kind="POSITIONAL_OR_NAMED" required="true" repr="service_name: str">
+<name>service_name</name>
+<type typedoc="string">str</type>
+</arg>
+<arg kind="VAR_NAMED" required="false" repr="**kwargs">
+<name>kwargs</name>
+</arg>
+</arguments>
+<doc/>
+<shortdoc/>
+</kw>
+</keywords>
+<datatypes>
+</datatypes>
+<typedocs>
+<type name="string" type="Standard">
+<doc>&lt;p&gt;All arguments are converted to Unicode strings.&lt;/p&gt;</doc>
+<accepts>
+<type>Any</type>
+</accepts>
+<usages>
+<usage>Service Execute Command</usage>
+<usage>Service Wait For Event</usage>
+</usages>
+</type>
+</typedocs>
+</keywordspec>

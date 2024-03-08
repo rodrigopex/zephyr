@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+message MsgTriggerEvt {
+  message Initiated {}
+
+  message Ready {}
+
+  message Failed {
+    int32 error_code = 1;
+  }
+
+  message Activated {}
+
+  oneof trigger_evt {
+    Initiated initiated = 1;
+    Ready ready = 2;
+    Failed failed = 3;
+    Activated activated = 4;
+  }
+}
+
+service TiggerService {}

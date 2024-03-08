@@ -6,7 +6,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/zbus/zbus.h>
 
-#include "ifaces/trigger.h"
+#include "services/trigger.h"
 
 LOG_MODULE_DECLARE(app, CONFIG_APP_LOG_LEVEL);
 
@@ -25,8 +25,8 @@ void button_pressed(const struct device *dev, struct gpio_callback *cb, uint32_t
 {
 	LOG_INF("Button pressed at %" PRIu32, k_cycle_get_32());
 
-	zbus_chan_pub(&chan_trigger_event,
-		      MSG_TRIGGER_EVT(.which_trigger_evt = MSG_TRIGGER_EVENT_ACTIVATED_TAG),
+	zbus_chan_pub(&chan_trigger_evt,
+		      MSG_TRIGGER_EVT(.which_trigger_evt = MSG_TRIGGER_EVT_ACTIVATED_TAG),
 		      K_NO_WAIT);
 }
 
@@ -35,8 +35,8 @@ void button_thread(void)
 	int err;
 
 	if (!gpio_is_ready_dt(&button)) {
-		zbus_chan_pub(&chan_trigger_event,
-			      MSG_TRIGGER_EVT(.which_trigger_evt = MSG_TRIGGER_EVENT_FAILED_TAG,
+		zbus_chan_pub(&chan_trigger_evt,
+			      MSG_TRIGGER_EVT(.which_trigger_evt = MSG_TRIGGER_EVT_FAILED_TAG,
 					      .failed = {.error_code = -ENODEV}),
 			      K_MSEC(500));
 
@@ -45,8 +45,8 @@ void button_thread(void)
 
 	err = gpio_pin_configure_dt(&button, GPIO_INPUT);
 	if (err != 0) {
-		zbus_chan_pub(&chan_trigger_event,
-			      MSG_TRIGGER_EVT(.which_trigger_evt = MSG_TRIGGER_EVENT_FAILED_TAG,
+		zbus_chan_pub(&chan_trigger_evt,
+			      MSG_TRIGGER_EVT(.which_trigger_evt = MSG_TRIGGER_EVT_FAILED_TAG,
 					      .failed = {.error_code = err}),
 			      K_MSEC(500));
 
@@ -55,8 +55,8 @@ void button_thread(void)
 
 	err = gpio_pin_interrupt_configure_dt(&button, GPIO_INT_EDGE_TO_ACTIVE);
 	if (err != 0) {
-		zbus_chan_pub(&chan_trigger_event,
-			      MSG_TRIGGER_EVT(.which_trigger_evt = MSG_TRIGGER_EVENT_FAILED_TAG,
+		zbus_chan_pub(&chan_trigger_evt,
+			      MSG_TRIGGER_EVT(.which_trigger_evt = MSG_TRIGGER_EVT_FAILED_TAG,
 					      .failed = {.error_code = err}),
 			      K_MSEC(500));
 
@@ -69,9 +69,8 @@ void button_thread(void)
 
 	LOG_INF("Set up button at %s pin %d", button.port->name, button.pin);
 
-	zbus_chan_pub(&chan_trigger_event,
-		      MSG_TRIGGER_EVT(.which_trigger_evt = MSG_TRIGGER_EVENT_READY_TAG),
-		      K_MSEC(500));
+	zbus_chan_pub(&chan_trigger_evt,
+		      MSG_TRIGGER_EVT(.which_trigger_evt = MSG_TRIGGER_EVT_READY_TAG), K_MSEC(500));
 }
 
 K_THREAD_DEFINE(button_thread_id, 2048, button_thread, NULL, NULL, NULL, 3, 0, 0);

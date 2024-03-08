@@ -1,4 +1,0 @@
-MsgIndicatorCommand.indicator_cmd anonymous_oneof:true
-MsgIndicatorResponse.indicator_rsp anonymous_oneof:true
-MsgIndicatorEvent.indicator_evt anonymous_oneof:true
-

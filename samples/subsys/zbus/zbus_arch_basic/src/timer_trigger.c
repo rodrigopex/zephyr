@@ -1,7 +1,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/zbus/zbus.h>
 
-#include "ifaces/trigger.h"
+#include "services/trigger.h"
 
 struct msg_timer_trigger_settings {
 	int timeout;

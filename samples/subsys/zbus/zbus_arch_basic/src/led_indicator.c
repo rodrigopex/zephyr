@@ -4,8 +4,8 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/logging/log.h>
 
-#include "ifaces/indicator.h"
-#include "ifaces/trigger.h"
+#include "services/indicator.h"
+#include "services/trigger.h"
 
 LOG_MODULE_DECLARE(app, CONFIG_APP_LOG_LEVEL);
 
@@ -19,8 +19,8 @@ static struct {
 
 ZBUS_MSG_SUBSCRIBER_DEFINE(msub_led_indicator);
 
-ZBUS_CHAN_ADD_OBS(chan_trigger_event, msub_led_indicator, 3);
-ZBUS_CHAN_ADD_OBS(chan_indicator_command, msub_led_indicator, 3);
+ZBUS_CHAN_ADD_OBS(chan_trigger_evt, msub_led_indicator, 3);
+ZBUS_CHAN_ADD_OBS(chan_indicator_cmd, msub_led_indicator, 3);
 
 static inline void update_led_state(void)
 {
@@ -40,27 +40,41 @@ static inline void pulse(void)
 	toggle();
 }
 
+static inline int send_state_reponse()
+{
+	return zbus_chan_pub(&chan_indicator_rsp,
+			     MSG_INDICATOR_RSP(.which_indicator_rsp = MSG_INDICATOR_RSP_STATE_TAG,
+					       .state = {.is_on = self.is_on}),
+			     K_MSEC(250));
+}
+static inline int send_pulse_config_reponse()
+{
+	return zbus_chan_pub(
+		&chan_indicator_rsp,
+		MSG_INDICATOR_RSP(.which_indicator_rsp = MSG_INDICATOR_RSP_PULSE_CONFIG_TAG,
+				  .pulse_config = {.duration = self.pulse_duration}),
+		K_MSEC(250));
+}
+
 void led_thread(void)
 {
 	int err;
 
 	if (self.led.port && !gpio_is_ready_dt(&self.led)) {
-		zbus_chan_pub(
-			&chan_indicator_event,
-			MSG_INDICATOR_EVT(.which_indicator_evt = MSG_INDICATOR_EVENT_FAILED_TAG,
-					  .failed = {.error_code = -ENODEV}),
-			K_MSEC(500));
+		zbus_chan_pub(&chan_indicator_evt,
+			      MSG_INDICATOR_EVT(.which_indicator_evt = MSG_INDICATOR_EVT_FAILED_TAG,
+						.failed = {.error_code = -ENODEV}),
+			      K_MSEC(500));
 
 		return;
 	}
 
 	err = gpio_pin_configure_dt(&self.led, GPIO_OUTPUT);
 	if (err != 0) {
-		zbus_chan_pub(
-			&chan_indicator_event,
-			MSG_INDICATOR_EVT(.which_indicator_evt = MSG_INDICATOR_EVENT_FAILED_TAG,
-					  .failed = {.error_code = err}),
-			K_MSEC(500));
+		zbus_chan_pub(&chan_indicator_evt,
+			      MSG_INDICATOR_EVT(.which_indicator_evt = MSG_INDICATOR_EVT_FAILED_TAG,
+						.failed = {.error_code = err}),
+			      K_MSEC(500));
 
 		return;
 	}
@@ -69,24 +83,24 @@ void led_thread(void)
 
 	LOG_INF("Set up LED at %s pin %d", self.led.port->name, self.led.pin);
 
-	zbus_chan_pub(&chan_indicator_event,
-		      MSG_INDICATOR_EVT(.which_indicator_evt = MSG_INDICATOR_EVENT_READY_TAG),
+	zbus_chan_pub(&chan_indicator_evt,
+		      MSG_INDICATOR_EVT(.which_indicator_evt = MSG_INDICATOR_EVT_READY_TAG),
 		      K_MSEC(500));
 
 	const struct zbus_channel *chan;
 
 	union {
-		struct msg_indicator_command indicator_cmd;
-		struct msg_trigger_event trigger_evt;
+		struct msg_indicator_cmd indicator_cmd;
+		struct msg_trigger_evt trigger_evt;
 	} msg;
 
 	zbus_obs_attach_to_thread(&msub_led_indicator);
 
 	while (1) {
 		zbus_sub_wait_msg(&msub_led_indicator, &chan, &msg, K_FOREVER);
-		if (chan == &chan_trigger_event) {
+		if (chan == &chan_trigger_evt) {
 			switch (msg.trigger_evt.which_trigger_evt) {
-			case MSG_TRIGGER_EVENT_ACTIVATED_TAG:
+			case MSG_TRIGGER_EVT_ACTIVATED_TAG:
 				pulse();
 				break;
 			default:
@@ -94,44 +108,33 @@ void led_thread(void)
 				break;
 			}
 
-		} else if (chan == &chan_indicator_command) {
+		} else if (chan == &chan_indicator_cmd) {
 			switch (msg.indicator_cmd.which_indicator_cmd) {
-			case MSG_INDICATOR_COMMAND_OFF_TAG:
+			case MSG_INDICATOR_CMD_OFF_TAG:
 				self.is_on = false;
 				update_led_state();
+				send_state_reponse();
 				break;
-			case MSG_INDICATOR_COMMAND_ON_TAG:
+			case MSG_INDICATOR_CMD_ON_TAG:
 				self.is_on = true;
 				update_led_state();
+				send_state_reponse();
 				break;
-			case MSG_INDICATOR_COMMAND_TOGGLE_TAG:
-
+			case MSG_INDICATOR_CMD_TOGGLE_TAG:
 				toggle();
+				send_state_reponse();
 				break;
-			case MSG_INDICATOR_COMMAND_PULSE_TAG:
+			case MSG_INDICATOR_CMD_PULSE_TAG:
 				pulse();
+				send_state_reponse();
 				break;
-			case MSG_INDICATOR_COMMAND_GET_PULSE_CONFIG_TAG: {
-				zbus_chan_pub(
-					&chan_indicator_response,
-					MSG_INDICATOR_RSP(
-							.which_indicator_rsp =
-								MSG_INDICATOR_RESPONSE_PULSE_CONFIG_TAG,
-							.pulse_config =
-								{.duration = self.pulse_duration}),
-					K_MSEC(250));
+			case MSG_INDICATOR_CMD_GET_PULSE_CONFIG_TAG: {
+				send_pulse_config_reponse();
 				break;
 			}
-			case MSG_INDICATOR_COMMAND_SET_PULSE_CONFIG_TAG: {
+			case MSG_INDICATOR_CMD_SET_PULSE_CONFIG_TAG: {
 				self.pulse_duration = msg.indicator_cmd.set_pulse_config.duration;
-				zbus_chan_pub(
-					&chan_indicator_response,
-					MSG_INDICATOR_RSP(
-							.which_indicator_rsp =
-								MSG_INDICATOR_RESPONSE_PULSE_CONFIG_TAG,
-							.pulse_config =
-								{.duration = self.pulse_duration}),
-					K_MSEC(250));
+				send_pulse_config_reponse();
 				break;
 			}
 			default:
