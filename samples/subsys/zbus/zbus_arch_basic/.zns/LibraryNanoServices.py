@@ -50,7 +50,7 @@ class LibraryNanoServices(object):
         from importlib import util
 
         spec = util.spec_from_file_location(
-            f"{service_name}_pb2", f"./build/include/services/{service_name}_pb2.py")
+            f"{service_name}_pb2", f"./build/nano_services/{service_name}_pb2.py")
 
         if spec is None:
             raise AssertionError(
@@ -95,7 +95,7 @@ class LibraryNanoServices(object):
         from importlib import util
 
         spec = util.spec_from_file_location(
-            f"{service_name}_pb2", f"./build/include/services/{service_name}_pb2.py")
+            f"{service_name}_pb2", f"./build/nano_services/{service_name}_pb2.py")
 
         if spec is None:
             raise AssertionError(

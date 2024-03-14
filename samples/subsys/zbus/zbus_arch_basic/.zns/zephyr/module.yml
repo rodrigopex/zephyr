@@ -1,0 +1,4 @@
+name: nano_services
+build:
+  cmake: .
+  kconfig: Kconfig

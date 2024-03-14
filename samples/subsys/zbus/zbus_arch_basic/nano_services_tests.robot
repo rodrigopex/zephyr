@@ -1,9 +1,10 @@
 *** Settings ***
 Library             Process
 Library             Dialogs
-Library             LibraryNanoServices.py    ${services}    ${services_proto_path}    ${serial_port}    ${serial_bauderate}    timeout=${serial_timeout}
+Library             .zns/LibraryNanoServices.py    ${services}    ${services_proto_path}    ${serial_port}    ${serial_bauderate}    timeout=${serial_timeout}
 
 Suite Teardown      Terminate All Processes    kill=True
+# Run the command: robot -d /tmp --variable rebuild_and_flash:True nano_services_tests.robot
 
 
 *** Variables ***
@@ -11,7 +12,7 @@ ${board}                    efr32bg22_brd4184b
 ${rebuild_and_flash}        True
 # Service list
 @{services}                 indicator    trigger
-${services_proto_path}      include/services/
+${services_proto_path}      nano_services/
 # Serial configuration
 ${serial_port}              /dev/ttyACM0
 ${serial_bauderate}         115200

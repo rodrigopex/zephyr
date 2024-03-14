@@ -5,12 +5,11 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(nano_service_arch)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/build/include/services)
 
-include(nano_services.cmake)
-nano_service_cre_register(app include/services/indicator.proto)
+include(.zns/nano_services.cmake)
+nano_service_cre_register(app nano_services/indicator.proto)
 
-nano_service_e_register(app include/services/trigger.proto)
+nano_service_e_register(app nano_services/trigger.proto)
 
 if(CONFIG_BUTTON_TRIGGER)
   target_sources(app PRIVATE src/button_trigger.c)
