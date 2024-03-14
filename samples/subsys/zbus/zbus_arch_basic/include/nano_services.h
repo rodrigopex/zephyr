@@ -16,7 +16,7 @@
 #define NANO_SERVICE_RSP_DUMP(service, SERVICE)                                                    \
 	static void dump_listener_callback_##service##_rsp(const struct zbus_channel *chan)        \
 	{                                                                                          \
-		uint8_t buffer[MSG_##SERVICE##_RSP_SIZE] = {0};                                    \
+		uint8_t buffer[MSG_##SERVICE##_RSP_SIZE];                                          \
 		pb_ostream_t stream = pb_ostream_from_buffer(buffer, MSG_##SERVICE##_RSP_SIZE);    \
 		const struct msg_##service##_rsp *serv = zbus_chan_const_msg(chan);                \
 		pb_encode(&stream, MSG_##SERVICE##_RSP_FIELDS, serv);                              \
@@ -31,7 +31,7 @@
 #define NANO_SERVICE_EVT_DUMP(service, SERVICE)                                                    \
 	static void dump_listener_callback_##service##_evt(const struct zbus_channel *chan)        \
 	{                                                                                          \
-		uint8_t buffer[MSG_##SERVICE##_EVT_SIZE] = {0};                                    \
+		uint8_t buffer[MSG_##SERVICE##_EVT_SIZE];                                          \
 		pb_ostream_t stream = pb_ostream_from_buffer(buffer, MSG_##SERVICE##_EVT_SIZE);    \
 		const struct msg_##service##_evt *serv = zbus_chan_const_msg(chan);                \
 		pb_encode(&stream, MSG_##SERVICE##_EVT_FIELDS, serv);                              \

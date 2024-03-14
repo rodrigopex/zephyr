@@ -4,8 +4,8 @@
 #include <zephyr/sys/util.h>
 #include <zephyr/logging/log.h>
 
-#include "services/indicator.h"
-#include "services/trigger.h"
+#include "nano_services/indicator.h"
+#include "nano_services/trigger.h"
 
 LOG_MODULE_DECLARE(app, CONFIG_APP_LOG_LEVEL);
 

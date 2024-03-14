@@ -1,0 +1,34 @@
+
+#include "@service@.h"
+
+ZBUS_CHAN_DEFINE(chan_@service@_cmd,       /* Name */
+		 struct msg_@service@_cmd, /* Message type */
+		 NULL,                     /* Validator */
+		 NULL,                     /* User data */
+		 ZBUS_OBSERVERS_EMPTY,     /* Observers list */
+		 MSG_@SERVICE_UPPER@_CMD_INIT_DEFAULT /* Message initialization */);
+
+ZBUS_CHAN_DEFINE(chan_@service@_rsp,       /* Name */
+		 struct msg_@service@_rsp, /* Message type */
+		 NULL,                     /* Validator */
+		 NULL,                     /* User data */
+		 ZBUS_OBSERVERS_EMPTY,     /* Observers list */
+		 MSG_@SERVICE_UPPER@_RSP_INIT_DEFAULT /* Message initialization */);
+
+ZBUS_CHAN_DEFINE(chan_@service@_evt,       /* Name */
+		 struct msg_@service@_evt, /* Message type */
+		 NULL,                     /* Validator */
+		 NULL,                     /* User data */
+		 ZBUS_OBSERVERS_EMPTY,     /* Observers list */
+		 MSG_@SERVICE_UPPER@_EVT_INIT_DEFAULT /* Message initialization */);
+
+#if defined(CONFIG_SHELL)
+
+#include "nano_services.h"
+
+NANO_SERVICE_SHELL_INIT();
+NANO_SERVICE_RSP_DUMP(@service@, @SERVICE_UPPER@);
+NANO_SERVICE_EVT_DUMP(@service@, @SERVICE_UPPER@);
+NANO_SERVICE_CMD_HANDLER(@service@, @SERVICE_UPPER@);
+
+#endif /* CONFIG_SHELL */

@@ -37,8 +37,11 @@ class LibraryNanoServices(object):
             service_proto_file_path = os.path.join(
                 services_proto_path, f"{service_name}.proto")
             if not os.path.exists(service_py_file_path):
-                subprocess.run(f"protoc --python_out=build {service_proto_file_path}",
+                subprocess.run(f"protoc -I{os.environ['ZEPHYR_BASE']}/../modules/lib/nanopb/generator/proto -I. --python_out=build {service_proto_file_path}",
                                shell=True, check=True).returncode
+        import sys
+        sys.path.append(
+            f"{os.environ['ZEPHYR_BASE']}/../modules/lib/nanopb/generator/proto")
 
     def cleanup(self):
         self.__serial.close()

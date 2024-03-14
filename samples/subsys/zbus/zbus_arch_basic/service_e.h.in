@@ -1,0 +1,10 @@
+
+#include <zephyr/zbus/zbus.h>
+#include "@service@.pb.h"
+
+ZBUS_CHAN_DECLARE(chan_@service@_evt);
+
+/* Compound literals constructors for the messages
+ * For reference: https://gcc.gnu.org/onlinedocs/gcc/Compound-Literals.html */
+
+#define MSG_@SERVICE_UPPER@_EVT(_val, ...) ((struct msg_@service@_evt[]){{_val, ##__VA_ARGS__}})

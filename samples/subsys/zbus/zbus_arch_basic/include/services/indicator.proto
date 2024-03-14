@@ -1,4 +1,6 @@
-syntax = "proto3";
+import "nanopb.proto";
+
+option (nanopb_fileopt).anonymous_oneof = true;
 
 message MsgIndicatorCmd {
   message On {}
@@ -12,7 +14,7 @@ message MsgIndicatorCmd {
   message GetPulseConfig {}
 
   message SetPulseConfig {
-    uint32 duration = 1;
+    required uint32 duration = 1;
   }
 
   oneof indicator_cmd {
@@ -27,11 +29,11 @@ message MsgIndicatorCmd {
 
 message MsgIndicatorRsp {
   message State {
-    bool is_on = 1;
+    required bool is_on = 1;
   }
 
   message PulseConfig {
-    uint32 duration = 1;
+    required uint32 duration = 1;
   }
 
   oneof indicator_rsp {
@@ -46,7 +48,7 @@ message MsgIndicatorEvt {
   message Ready {}
 
   message Failed {
-    int32 error_code = 1;
+    required int32 error_code = 1;
   }
 
   oneof indicator_evt {

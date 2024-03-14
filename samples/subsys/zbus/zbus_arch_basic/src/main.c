@@ -1,7 +1,7 @@
 #include <zephyr/zbus/zbus.h>
 
-#include "services/indicator.h"
-#include "services/trigger.h"
+#include "nano_services/indicator.h"
+#include "nano_services/trigger.h"
 
 #include <zephyr/logging/log.h>
 

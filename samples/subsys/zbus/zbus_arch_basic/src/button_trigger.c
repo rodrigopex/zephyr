@@ -1,12 +1,12 @@
-#include <zephyr/kernel.h>
+#include <inttypes.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/sys/util.h>
-#include <inttypes.h>
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/util.h>
 #include <zephyr/zbus/zbus.h>
 
-#include "services/trigger.h"
+#include "nano_services/trigger.h"
 
 LOG_MODULE_DECLARE(app, CONFIG_APP_LOG_LEVEL);
 
