@@ -1,22 +1,26 @@
+syntax = "proto3";
+
 import "nanopb.proto";
 
 option (nanopb_fileopt).anonymous_oneof = true;
 
-message MsgTriggerEvt {
-  message Initiated {}
+message Trigger {
+    message Evt {
+        message Initiated {}
 
-  message Ready {}
+        message Ready {}
 
-  message Failed {
-    required int32 error_code = 1;
-  }
+        message Failed {
+            int32 error_code = 1;
+        }
 
-  message Activated {}
+        message Activated {}
 
-  oneof trigger_evt {
-    Initiated initiated = 1;
-    Ready ready = 2;
-    Failed failed = 3;
-    Activated activated = 4;
-  }
+        oneof trigger_evt {
+            Initiated initiated = 1;
+            Ready ready = 2;
+            Failed failed = 3;
+            Activated activated = 4;
+        }
+    }
 }

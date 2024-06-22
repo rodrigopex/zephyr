@@ -1,71 +1,60 @@
+syntax = "proto3";
+
 import "nanopb.proto";
 
 option (nanopb_fileopt).anonymous_oneof = true;
 
-message MsgIndicatorCmd {
-  message On {}
+message Indicator {
+    message Cmd {
+        message On {}
 
-  message Off {}
+        message Off {}
 
-  message Toggle {}
+        message Toggle {}
 
-  message Pulse {}
+        message Pulse {}
 
-  message GetPulseConfig {}
+        message GetConfig {}
 
-  message SetPulseConfig {
-    required uint32 duration = 1;
-  }
+        message SetConfig {
+            uint32 duration = 1;
+        }
 
-  oneof indicator_cmd {
-    On on = 1;
-    Off off = 2;
-    Toggle toggle = 3;
-    Pulse pulse = 4;
-    GetPulseConfig get_pulse_config = 5;
-    SetPulseConfig set_pulse_config = 6;
-  }
-}
+        oneof indicator_cmd {
+            On on = 1;
+            Off off = 2;
+            Toggle toggle = 3;
+            Pulse pulse = 4;
+            GetConfig get_config = 5;
+            SetConfig set_config = 6;
+        }
+    }
 
-message MsgIndicatorRsp {
-  message State {
-    required bool is_on = 1;
-  }
+    message Evt {
+        message State {
+            bool is_on = 1;
+        }
 
-  message PulseConfig {
-    required uint32 duration = 1;
-  }
+        message Config {
+            uint32 duration = 1;
+        }
 
-  oneof indicator_rsp {
-    State state = 1;
-    PulseConfig pulse_config = 2;
-  }
-}
+        oneof indicator_rsp {
+        }
+        message Initiated {}
 
-message MsgIndicatorEvt {
-  message Initiated {}
+        message Ready {}
 
-  message Ready {}
+        message Failed {
+            int32 error_code = 1;
+        }
 
-  message Failed {
-    required int32 error_code = 1;
-  }
-
-  oneof indicator_evt {
-    Initiated initiated = 1;
-    Ready ready = 2;
-    Failed failed = 3;
-  }
-}
-
-/*
- * This service interface is only for documenting the service. No code is generated from it.
- */
-service IndicatorService {
-  rpc on(MsgIndicatorCmd.On) returns (MsgIndicatorRsp.State);
-  rpc off(MsgIndicatorCmd.Off) returns (MsgIndicatorRsp.State);
-  rpc toggle(MsgIndicatorCmd.Toggle) returns (MsgIndicatorRsp.State);
-  rpc pulse(MsgIndicatorCmd.Pulse) returns (MsgIndicatorRsp.State);
-  rpc get_pulse_config(MsgIndicatorCmd.GetPulseConfig) returns (MsgIndicatorRsp.PulseConfig);
-  rpc set_pulse_config(MsgIndicatorCmd.SetPulseConfig) returns (MsgIndicatorRsp.PulseConfig);
+        oneof indicator_evt {
+            State state = 1;
+            Config config = 2;
+            Initiated initiated = 3;
+            Ready ready = 4;
+            Failed failed = 5;
+        }
+    }
 }
