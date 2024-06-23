@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+import "nanopb.proto";
+
+option (nanopb_fileopt).anonymous_oneof = true;
+
+
+message MsgTrigger {
+    message Empty {}
+
+    message Cmd {}
+
+    message Evt {
+        message Failed {
+            int32 error_code = 1;
+        }
+
+        oneof trigger_evt {
+            Empty initiated = 1;
+            Empty ready = 2;
+            Empty activated = 3;
+            Failed failed = 4;
+        }
+    }
+
+}

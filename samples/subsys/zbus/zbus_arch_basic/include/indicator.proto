@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+import "nanopb.proto";
+
+option (nanopb_fileopt).anonymous_oneof = true;
+
+
+message MsgIndicator {
+    message Empty {}
+
+    message Config {
+        uint32 pulse_duration = 1;
+    }
+
+    message State {
+        bool is_on = 1;
+    }
+
+    message Failed {
+        int32 error_code = 1;
+    }
+
+    message Cmd {
+        oneof indicator_cmd {
+            Empty on = 1;
+            Empty off = 2;
+            Empty toggle = 3;
+            Empty pulse = 4;
+            Empty report_state = 5;
+            Empty report_config = 6;
+            Config set_config = 7;
+        }
+    }
+
+    message Evt {
+        oneof indicator_evt {
+            Empty initiated = 1;
+            Empty ready = 2;
+            State state = 3;
+            Config config = 4;
+            Failed failed = 5;
+        }
+    }
+}

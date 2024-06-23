@@ -40,20 +40,19 @@ static inline void pulse(void)
 	toggle();
 }
 
-static inline int send_state_reponse()
+static inline int report_state_event()
 {
-	return zbus_chan_pub(&chan_indicator_rsp,
-			     MSG_INDICATOR_RSP(.which_indicator_rsp = MSG_INDICATOR_RSP_STATE_TAG,
+	return zbus_chan_pub(&chan_indicator_evt,
+			     MSG_INDICATOR_EVT(.which_indicator_evt = MSG_INDICATOR_EVT_STATE_TAG,
 					       .state = {.is_on = self.is_on}),
 			     K_MSEC(250));
 }
-static inline int send_pulse_config_reponse()
+static inline int report_config_event()
 {
-	return zbus_chan_pub(
-		&chan_indicator_rsp,
-		MSG_INDICATOR_RSP(.which_indicator_rsp = MSG_INDICATOR_RSP_PULSE_CONFIG_TAG,
-				  .pulse_config = {.duration = self.pulse_duration}),
-		K_MSEC(250));
+	return zbus_chan_pub(&chan_indicator_evt,
+			     MSG_INDICATOR_EVT(.which_indicator_evt = MSG_INDICATOR_EVT_CONFIG_TAG,
+					       .config = {.pulse_duration = self.pulse_duration}),
+			     K_MSEC(250));
 }
 
 void led_thread(void)
@@ -110,31 +109,34 @@ void led_thread(void)
 
 		} else if (chan == &chan_indicator_cmd) {
 			switch (msg.indicator_cmd.which_indicator_cmd) {
+			case MSG_INDICATOR_CMD_REPORT_STATE_TAG:
+				report_state_event();
+				break;
 			case MSG_INDICATOR_CMD_OFF_TAG:
 				self.is_on = false;
 				update_led_state();
-				send_state_reponse();
+				report_state_event();
 				break;
 			case MSG_INDICATOR_CMD_ON_TAG:
 				self.is_on = true;
 				update_led_state();
-				send_state_reponse();
+				report_state_event();
 				break;
 			case MSG_INDICATOR_CMD_TOGGLE_TAG:
 				toggle();
-				send_state_reponse();
+				report_state_event();
 				break;
 			case MSG_INDICATOR_CMD_PULSE_TAG:
 				pulse();
-				send_state_reponse();
+				report_state_event();
 				break;
-			case MSG_INDICATOR_CMD_GET_PULSE_CONFIG_TAG: {
-				send_pulse_config_reponse();
+			case MSG_INDICATOR_CMD_REPORT_CONFIG_TAG: {
+				report_config_event();
 				break;
 			}
-			case MSG_INDICATOR_CMD_SET_PULSE_CONFIG_TAG: {
-				self.pulse_duration = msg.indicator_cmd.set_pulse_config.duration;
-				send_pulse_config_reponse();
+			case MSG_INDICATOR_CMD_SET_CONFIG_TAG: {
+				self.pulse_duration = msg.indicator_cmd.set_config.pulse_duration;
+				report_config_event();
 				break;
 			}
 			default:

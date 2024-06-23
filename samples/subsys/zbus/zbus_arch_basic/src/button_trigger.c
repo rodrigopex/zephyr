@@ -30,35 +30,34 @@ void button_pressed(const struct device *dev, struct gpio_callback *cb, uint32_t
 		      K_NO_WAIT);
 }
 
+static inline int report_error(int event_type, int error_code, k_timeout_t timeout)
+{
+	return zbus_chan_pub(&chan_trigger_evt,
+			     MSG_TRIGGER_EVT(.which_trigger_evt = event_type,
+					     .failed = {.error_code = error_code}),
+			     timeout);
+}
+
 void button_thread(void)
 {
 	int err;
 
 	if (!gpio_is_ready_dt(&button)) {
-		zbus_chan_pub(&chan_trigger_evt,
-			      MSG_TRIGGER_EVT(.which_trigger_evt = MSG_TRIGGER_EVT_FAILED_TAG,
-					      .failed = {.error_code = -ENODEV}),
-			      K_MSEC(500));
+		report_error(MSG_TRIGGER_EVT_FAILED_TAG, -ENODEV, K_MSEC(500));
 
 		return;
 	}
 
 	err = gpio_pin_configure_dt(&button, GPIO_INPUT);
 	if (err != 0) {
-		zbus_chan_pub(&chan_trigger_evt,
-			      MSG_TRIGGER_EVT(.which_trigger_evt = MSG_TRIGGER_EVT_FAILED_TAG,
-					      .failed = {.error_code = err}),
-			      K_MSEC(500));
+		report_error(MSG_TRIGGER_EVT_FAILED_TAG, err, K_MSEC(500));
 
 		return;
 	}
 
 	err = gpio_pin_interrupt_configure_dt(&button, GPIO_INT_EDGE_TO_ACTIVE);
 	if (err != 0) {
-		zbus_chan_pub(&chan_trigger_evt,
-			      MSG_TRIGGER_EVT(.which_trigger_evt = MSG_TRIGGER_EVT_FAILED_TAG,
-					      .failed = {.error_code = err}),
-			      K_MSEC(500));
+		report_error(MSG_TRIGGER_EVT_FAILED_TAG, err, K_MSEC(500));
 
 		return;
 	}
