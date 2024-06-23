@@ -1,0 +1,3 @@
+[submodule "samples/subsys/zbus/zbus_arch_basic/zns"]
+	path = samples/subsys/zbus/zbus_arch_basic/zns
+	url = git@github.com:rodrigopex/zns.git

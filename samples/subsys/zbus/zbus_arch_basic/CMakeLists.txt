@@ -6,7 +6,7 @@ project(nano_service_arch)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-include(.zns/nano_services.cmake)
+include(zns/nano_services.cmake)
 nano_service_cre_register(app nano_services/indicator.proto)
 
 nano_service_e_register(app nano_services/trigger.proto)
