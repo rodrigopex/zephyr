@@ -826,6 +826,15 @@ set the :kconfig:option:`CONFIG_ZBUS_RUNTIME_OBSERVERS` to enable the feature. I
 adjust the heap size by changing the configuration :kconfig:option:`CONFIG_HEAP_MEM_POOL_SIZE`. The
 following example illustrates the runtime registration usage.
 
+.. note::
+   Runtime observers behave very similar to static observers:
+
+   * They can observe multiple channels simultaneously and still receive notifications from them. In this case, it is necessary to consider using a union on the :c:func:`zbus_sub_wait_msg`;
+   * A runtime observer can turn on and off notifications from an individual channel of its channels observation list (observation basis) or entirely by disabling itself.
+
+
+.. warning::
+   The priority boost algorithm does not consider runtime observers in the protocol.
 
 
 .. code-block:: c
