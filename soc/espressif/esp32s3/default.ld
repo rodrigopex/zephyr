@@ -1015,6 +1015,7 @@ SECTIONS
     _ext_ram_noinit_end = ABSOLUTE(.);
 
     _ext_ram_bss_start = ABSOLUTE(.);
+    *(.mbedtls_heap*)
     *(.ext_ram.bss*)
     . = ALIGN(16);
     _ext_ram_bss_end = ABSOLUTE(.);
