@@ -4,9 +4,10 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(http_get)
 
-file(GLOB app_sources src/*.c)
-
-target_sources(app PRIVATE ${app_sources})
+target_sources(app PRIVATE
+  src/http_get.c
+  src/settings_thread.c
+)
 
 include(${ZEPHYR_BASE}/samples/net/common/common.cmake)
 

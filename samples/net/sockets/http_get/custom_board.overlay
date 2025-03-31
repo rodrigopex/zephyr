@@ -8,3 +8,13 @@
 		status = "okay";
 	};
 };
+
+/* 8MB flash */
+&flash0 {
+	reg = <0x0 DT_SIZE_M(8)>;
+};
+
+/* 2MB psram */
+&psram0 {
+	size = <DT_SIZE_M(2)>;
+};
