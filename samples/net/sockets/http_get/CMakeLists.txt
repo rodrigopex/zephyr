@@ -5,8 +5,9 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(http_get)
 
 target_sources(app PRIVATE
-  src/http_get.c
-  src/settings_thread.c
+  ./src/http_get.c
+  # src/settings_thread.c
+  ./src/nvs_usage.c
 )
 
 include(${ZEPHYR_BASE}/samples/net/common/common.cmake)

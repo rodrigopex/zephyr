@@ -6,6 +6,12 @@ b:
     west build -b adafruit_qt_py_esp32s3/esp32s3/procpu --no-sysbuild . -- -DEXTRA_CONF_FILE=overlay-spiram.conf -DEXTRA_DTC_OVERLAY_FILE=./custom_board.overlay
 f:
     west flash
+ef:
+    west flash --erase
 m:
     west espressif monitor
 
+
+# TODO: [pex] Make the issue happen earlier
+# TODO: [pex] Put the sample to work on the devkit just to compare with our solution
+# TODO: [pex] Add NVS to IDF sample to make the comparison fair
