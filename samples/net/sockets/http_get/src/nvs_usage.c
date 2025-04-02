@@ -13,7 +13,12 @@ static struct nvs_fs fs;
 
 #define STRING_ID 1
 
-#define RAM_SECTION                    __attribute__((section(".ext_ram.bss")))
+#if defined(CONFIG_SAMPLE_USE_SPIRAM)
+#define RAM_SECTION __attribute__((section(".ext_ram.bss")))
+#else
+#define RAM_SECTION
+#endif
+
 #define BUF_SIZE                       (128) /* 3.5KB */
 #define FLASH_READ_AMOUNT_BEFORE_WRITE 10000
 

@@ -6,3 +6,10 @@
 
 source "samples/net/common/Kconfig"
 source "Kconfig.zephyr"
+
+config SAMPLE_USE_SPIRAM
+	bool "Use SPIRAM to allocate MbedTLS heap, network stacks and some variables"
+	default y
+	depends on ESP_SPIRAM
+	select ESP32_WIFI_NET_ALLOC_SPIRAM
+	select MBEDTLS_HEAP_CUSTOM_SECTION

@@ -66,8 +66,14 @@ static struct wifi_connect_req_params sta_config;
 
 #define REQUEST "GET " HTTP_PATH " HTTP/1.1\r\nHost: " HTTP_HOST "\r\n\r\n"
 
+#if defined(CONFIG_SAMPLE_USE_SPIRAM)
+#define RAM_SECTION __attribute__((section(".ext_ram.bss")))
+#else
+#define RAM_SECTION
+#endif
+
 #define RESPONSE_BUFFER_SIZE 128
-static char response[RESPONSE_BUFFER_SIZE];
+RAM_SECTION static char response[RESPONSE_BUFFER_SIZE];
 
 static struct net_mgmt_event_callback cb;
 K_SEM_DEFINE(sem_connected_to_internet, 0, 1);
