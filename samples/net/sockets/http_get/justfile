@@ -1,12 +1,14 @@
 use_spiram := "y"
 extra_conf_file := if use_spiram =="y" {"-DEXTRA_CONF_FILE=overlay-spiram.conf "} else {""}
-
-flags := extra_conf_file + "-DEXTRA_DTC_OVERLAY_FILE=./custom_board.overlay -DCONFIG_SAMPLE_USE_SPIRAM=" + use_spiram
+extra_dtc_overlay_file := "./custom_board.overlay"
+board := "adafruit_qt_py_esp32s3/esp32s3/procpu"
+final_flags := extra_conf_file + " -DEXTRA_DTC_OVERLAY_FILE=" + extra_dtc_overlay_file +  " -DCONFIG_SAMPLE_USE_SPIRAM=" + use_spiram
+flags := ""
 
 c:
     rip build
 b:
-    west build -b adafruit_qt_py_esp32s3/esp32s3/procpu --no-sysbuild . -- {{flags}}
+    west build -b {{board}} --no-sysbuild . -- {{final_flags}} {{flags}}
 f:
     west flash
 ef:
