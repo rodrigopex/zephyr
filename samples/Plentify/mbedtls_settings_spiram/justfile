@@ -1,0 +1,18 @@
+zephyr_esp32s3_gdb_bin := "/home/rodrigopex/.local/zephyr-sdk-0.17.0/xtensa-espressif_esp32s3_zephyr-elf/bin/xtensa-espressif_esp32s3_zephyr-elf-gdb"
+flags := ""
+
+c:
+    rip build
+b:
+    west build -b adafruit_qt_py_esp32s3/esp32s3/procpu --no-sysbuild . -- -DEXTRA_CONF_FILE=overlay-spiram.conf -DEXTRA_DTC_OVERLAY_FILE=./custom_board.overlay
+    # west build -b esp32s3_devkitc/esp32s3/procpu --no-sysbuild . -- {{flags}} -DEXTRA_DTC_OVERLAY_FILE=./hotbot_lite_procpu.overlay
+f:
+    west flash
+m:
+    west espressif monitor
+
+# ds:
+#      {{openocd}} -s tcl -c 'set ESP_RTOS none' -c 'set ESP32_S3_ONLYCPU 1' -c 'set ESP_FLASH_SIZE 0' -f {{cfg_path}}  -c "init; reset halt" -d3
+
+# da:
+#     {{zephyr_esp32s3_gdb_bin}} -ex 'target extended-remote :3333' {{join(build_dir, "zephyr/zephyr.elf")}} -x gdbinit

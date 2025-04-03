@@ -5,6 +5,9 @@
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/fs/nvs.h>
 
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(nvs, LOG_LEVEL_DBG);
+
 static struct nvs_fs fs;
 
 #define NVS_PARTITION        storage_partition
@@ -19,7 +22,7 @@ static struct nvs_fs fs;
 #define RAM_SECTION
 #endif
 
-#define BUF_SIZE                       (128) /* 3.5KB */
+#define BUF_SIZE                       128
 #define FLASH_READ_AMOUNT_BEFORE_WRITE 10000
 
 RAM_SECTION int rc;
@@ -27,7 +30,7 @@ RAM_SECTION char buf[BUF_SIZE];
 
 void nvs_sample_thread(void *p1, void *p2, void *p3)
 {
-	printk(" ===> Starting NVS sample\n");
+	LOG_DBG(" ===> Starting NVS sample");
 	ARG_UNUSED(p1);
 	ARG_UNUSED(p2);
 	ARG_UNUSED(p3);
@@ -49,13 +52,13 @@ void nvs_sample_thread(void *p1, void *p2, void *p3)
 	 */
 	fs.flash_device = NVS_PARTITION_DEVICE;
 	if (!device_is_ready(fs.flash_device)) {
-		printk("Flash device %s is not ready\n", fs.flash_device->name);
+		LOG_DBG("Flash device %s is not ready", fs.flash_device->name);
 		return;
 	}
 	fs.offset = NVS_PARTITION_OFFSET;
 	rc = flash_get_page_info_by_offs(fs.flash_device, fs.offset, &info);
 	if (rc) {
-		printk("Unable to get page info, rc=%d\n", rc);
+		LOG_DBG("Unable to get page info, rc=%d", rc);
 		return;
 	}
 	fs.sector_size = info.size;
@@ -63,16 +66,16 @@ void nvs_sample_thread(void *p1, void *p2, void *p3)
 
 	rc = nvs_mount(&fs);
 	if (rc) {
-		printk("Flash Init failed, rc=%d\n", rc);
+		LOG_DBG("Flash Init failed, rc=%d", rc);
 		return;
 	}
 	rc = nvs_read(&fs, STRING_ID, &buf, sizeof(buf));
 	if (rc > 0) {
-		printk("Found counter: %" PRId64 "\n", *counter);
+		LOG_DBG("Found counter: %" PRId64, *counter);
 	}
 
 	while (1) {
-		printk(" ~~> Reading flash (reading amount: %d)\n", FLASH_READ_AMOUNT_BEFORE_WRITE);
+		LOG_DBG(" ~~> Reading flash (reading amount: %d)", FLASH_READ_AMOUNT_BEFORE_WRITE);
 
 		*counter += 1;
 
@@ -84,13 +87,14 @@ void nvs_sample_thread(void *p1, void *p2, void *p3)
 
 		for (int i = 0; i < FLASH_READ_AMOUNT_BEFORE_WRITE; ++i) {
 			rc = nvs_read(&fs, STRING_ID, &buf, sizeof(buf));
+			// k_busy_wait(100);
 			k_yield();
 		}
 
 		if (rc > 0) { /* item was found, show it */
-			printk("Counter: %" PRId64 "\n", *counter);
+			LOG_DBG("Counter: %" PRId64, *counter);
 		} else {
-			printk("Could not read flash. err=%d\n", rc);
+			LOG_DBG("Could not read flash. err=%d", rc);
 		}
 
 		k_msleep(100);

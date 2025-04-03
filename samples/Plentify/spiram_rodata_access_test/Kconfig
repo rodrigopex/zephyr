@@ -1,0 +1,23 @@
+config VERBOSE
+	bool "Verbose output during the tests"
+
+
+config MEM_INCREASE_STEP
+	int "Memory chunks (in bytes) to add each iteration"
+	default 1024
+
+config TEST_MEM_SIZE
+	int "The allocated size in bss or heap."
+	default 32768 if MEMTEST_BSS
+	default 65536 if MEMTEST_HEAP
+	default 0
+
+config STACK_SIZE
+	int "Base stack size (in bytes) for the tests"
+	default 16384
+
+config PARALLEL
+	bool "Run the tests in parallel. If disabled, all the tests are going to run sequentially."
+	default y
+
+source "Kconfig.zephyr"

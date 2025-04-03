@@ -1,0 +1,37 @@
+config VERBOSE
+	bool "Verbose output during the tests"
+
+
+config MEM_INCREASE_STEP
+	int "Memory chunks (in bytes) to add each iteration"
+	default 1024
+
+config TEST_MEM_SIZE
+	int "The allocated size in bss or heap."
+	default 32768 if MEMTEST_BSS
+	default 65536 if MEMTEST_HEAP
+	default 0
+
+config STACK_SIZE
+	int "Base stack size (in bytes) for the tests"
+	default 16384
+
+config PARALLEL
+	bool "Run the tests in parallel. If disabled, all the tests are going to run sequentially."
+	default y
+
+choice
+	prompt "The test to be executed"
+config MEMTEST_INLINE
+	bool "The memory is created inside the thread stack."
+
+config MEMTEST_BSS
+	bool "The memory is created outside the thread stack. It will be added in the ext_ram bss.yy"
+
+config MEMTEST_HEAP
+	bool "The memory is allocated in the system heap trasnposed to ext_ram."
+
+
+endchoice
+
+source "Kconfig.zephyr"

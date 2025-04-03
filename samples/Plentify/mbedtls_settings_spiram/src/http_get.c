@@ -38,8 +38,8 @@ LOG_MODULE_REGISTER(app, LOG_LEVEL_DBG);
 #define NET_EVENT_WIFI_MASK (NET_EVENT_WIFI_CONNECT_RESULT | NET_EVENT_WIFI_DISCONNECT_RESULT)
 
 /* STA Mode Configuration */
-#define WIFI_SSID "NETUNO"   /* Replace `SSID` with WiFi ssid. */
-#define WIFI_PSK  "11311118" /* Replace `PASSWORD` with Router password. */
+#define WIFI_SSID "SEU SSID" /* Replace `SSID` with WiFi ssid. */
+#define WIFI_PSK  "SENHA"    /* Replace `PASSWORD` with Router password. */
 
 static struct net_if *sta_iface;
 static struct wifi_connect_req_params sta_config;
@@ -59,22 +59,15 @@ static struct wifi_connect_req_params sta_config;
 #define CHECK(r)                                                                                   \
 	{                                                                                          \
 		if (r < 0) {                                                                       \
-			ret = r;                                                                   \
 			LOG_DBG("Error: %d", (int)r);                                              \
-			goto cleanup;                                                              \
+			exit(1);                                                                   \
 		}                                                                                  \
 	}
 
 #define REQUEST "GET " HTTP_PATH " HTTP/1.1\r\nHost: " HTTP_HOST "\r\n\r\n"
 
-#if defined(CONFIG_SAMPLE_USE_SPIRAM)
-#define RAM_SECTION __attribute__((section(".ext_ram.bss")))
-#else
-#define RAM_SECTION
-#endif
-
-#define RESPONSE_BUFFER_SIZE 128
-RAM_SECTION static char response[RESPONSE_BUFFER_SIZE];
+#define RESPONSE_BUFFER_SIZE 1024
+static char response[RESPONSE_BUFFER_SIZE];
 
 static struct net_mgmt_event_callback cb;
 K_SEM_DEFINE(sem_connected_to_internet, 0, 1);
@@ -124,7 +117,7 @@ static int connect_to_wifi(void)
 	int ret = net_mgmt(NET_REQUEST_WIFI_CONNECT, sta_iface, &sta_config,
 			   sizeof(struct wifi_connect_req_params));
 	if (ret) {
-		LOG_DBG("Unable to Connect to (%s). err=%d", WIFI_SSID, ret);
+		LOG_DBG("Unable to Connect to (%s)", WIFI_SSID);
 	}
 
 	return ret;
@@ -132,9 +125,9 @@ static int connect_to_wifi(void)
 
 int https_get()
 {
-	struct addrinfo *res = NULL;
-	int sock, ret = 0;
-	static struct addrinfo hints = {.ai_family = AF_INET, .ai_socktype = SOCK_STREAM};
+	static struct addrinfo hints;
+	struct addrinfo *res;
+	int st, sock;
 
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 	tls_credential_add(CA_CERTIFICATE_TAG, TLS_CREDENTIAL_CA_CERTIFICATE, ca_certificate,
@@ -143,7 +136,9 @@ int https_get()
 
 	LOG_DBG("Preparing HTTP GET request for http://" HTTP_HOST ":" HTTP_PORT HTTP_PATH);
 
-	int st = getaddrinfo(HTTP_HOST, HTTP_PORT, &hints, &res);
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	st = getaddrinfo(HTTP_HOST, HTTP_PORT, &hints, &res);
 	LOG_DBG("getaddrinfo status: %d", st);
 
 	if (st != 0) {
@@ -182,10 +177,9 @@ int https_get()
 	CHECK(send(sock, REQUEST, SSTRLEN(REQUEST), 0));
 
 	int i = 0;
-	char hexdump_str[64];
 	while (1) {
 		++i;
-		int len = recv(sock, response, RESPONSE_BUFFER_SIZE, 0);
+		int len = recv(sock, response, RESPONSE_BUFFER_SIZE - 1, 0);
 
 		if (len == -1) {
 			break;
@@ -201,25 +195,20 @@ int https_get()
 			break;
 		}
 
-		snprintk(hexdump_str, 64, "Response (fragment=%d, length=%d):", i, len);
-		LOG_HEXDUMP_DBG(response, RESPONSE_BUFFER_SIZE, hexdump_str);
+		response[len] = 0;
+		LOG_DBG("Response (fragment=%d):\n%s", i, response);
 	}
-cleanup:
-	freeaddrinfo(res);
-	res = NULL;
+
 	(void)close(sock);
 
 	LOG_WRN("Close socket");
 
-	return ret;
+	return 0;
 }
 
-void https_get_thread(void *p1, void *p2, void *p3)
+int main(void)
 {
-	printk(" ===> Starting HTTPS get sample\n");
-	ARG_UNUSED(p1);
-	ARG_UNUSED(p2);
-	ARG_UNUSED(p3);
+	k_sleep(K_SECONDS(5));
 
 	net_mgmt_init_event_callback(&cb, wifi_event_handler, NET_EVENT_WIFI_MASK);
 	net_mgmt_add_event_callback(&cb);
@@ -229,16 +218,16 @@ void https_get_thread(void *p1, void *p2, void *p3)
 
 	connect_to_wifi();
 
-	do {
-		LOG_DBG("Waiting to connect to wifi...");
-	} while (k_sem_take(&sem_connected_to_internet, K_SECONDS(60)) != 0);
+	LOG_DBG("Waiting to connect to wifi...");
+	k_sem_take(&sem_connected_to_internet, K_FOREVER);
 
 	while (1) {
 		int err = https_get();
 		if (err) {
 			LOG_ERR("Could not get the https request: %d", err);
 		}
+		k_msleep(5000);
 	}
-}
 
-K_THREAD_DEFINE(https_get_thread_id, 12288, https_get_thread, NULL, NULL, NULL, 3, 0, 0);
+	return 0;
+}

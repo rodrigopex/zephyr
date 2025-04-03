@@ -4,12 +4,9 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
 project(http_get)
 
-target_sources(app PRIVATE
-  ./src/main.c
-  ./src/http_get.c
-  # src/settings_thread.c
-  ./src/nvs_usage.c
-)
+file(GLOB app_sources src/*.c)
+
+target_sources(app PRIVATE ${app_sources})
 
 include(${ZEPHYR_BASE}/samples/net/common/common.cmake)
 
@@ -19,4 +16,4 @@ generate_inc_file_for_target(
     app
     src/globalsign_r1.der
     ${gen_dir}/globalsign_r1.der.inc
-)
+    )

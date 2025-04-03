@@ -4,17 +4,43 @@ extra_dtc_overlay_file := "./custom_board.overlay"
 board := "adafruit_qt_py_esp32s3/esp32s3/procpu"
 final_flags := extra_conf_file + " -DEXTRA_DTC_OVERLAY_FILE=" + extra_dtc_overlay_file +  " -DCONFIG_SAMPLE_USE_SPIRAM=" + use_spiram
 flags := ""
+arch := "x86_64"
 
 c:
     rip build
+
 b:
     west build -b {{board}} --no-sysbuild . -- {{final_flags}} {{flags}}
+
 f:
     west flash
 ef:
     west flash --erase
+
 m:
     west espressif monitor
+ml:
+    west espressif monitor |& tee /tmp/output.log
+
+
+# https://academy.nordicsemi.com/courses/nrf-connect-sdk-intermediate/lessons/lesson-2-debugging/topic/exercise-2-11/
+# I needed to clean up the dump file to be able to run the parse script
+coredump_parse file:
+    python $ZEPHYR_BASE/scripts/coredump/coredump_serial_log_parser.py {{file}} dump.bin
+
+coredump_ds:
+    python $ZEPHYR_BASE/scripts/coredump/coredump_gdbserver.py build/zephyr/zephyr.elf dump.bin -v
+
+coredump_da:
+    $ZEPHYR_SDK_INSTALL_DIR/{{arch}}-zephyr-elf/bin/{{arch}}-zephyr-elf-gdb build/zephyr/zephyr.elf -ex "target remote :1234"
+
+coredump_run:
+    #!/usr/bin/env bash
+    python $ZEPHYR_BASE/scripts/coredump/coredump_gdbserver.py build/zephyr/zephyr.elf dump.bin &
+    ds_pid=$!
+    $ZEPHYR_SDK_INSTALL_DIR/{{arch}}-zephyr-elf/bin/{{arch}}-zephyr-elf-gdb build/zephyr/zephyr.elf -ex "target remote :1234"
+    echo "\nKilling the debug server [$ds_pid]"
+    kill $ds_pid
 
 
 # TODO: [pex] Make the issue happen earlier
