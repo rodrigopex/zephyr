@@ -59,8 +59,9 @@ static struct wifi_connect_req_params sta_config;
 #define CHECK(r)                                                                                   \
 	{                                                                                          \
 		if (r < 0) {                                                                       \
+			ret = r;                                                                   \
 			LOG_DBG("Error: %d", (int)r);                                              \
-			return r;                                                                  \
+			goto cleanup;                                                              \
 		}                                                                                  \
 	}
 
@@ -133,7 +134,7 @@ int https_get()
 {
 	static struct addrinfo hints;
 	struct addrinfo *res;
-	int st, sock;
+	int st, sock, ret = 0;
 
 #if defined(CONFIG_NET_SOCKETS_SOCKOPT_TLS)
 	tls_credential_add(CA_CERTIFICATE_TAG, TLS_CREDENTIAL_CA_CERTIFICATE, ca_certificate,
@@ -205,12 +206,13 @@ int https_get()
 		snprintk(hexdump_str, 64, "Response (fragment=%d, length=%d):", i, len);
 		LOG_HEXDUMP_DBG(response, RESPONSE_BUFFER_SIZE, hexdump_str);
 	}
-
+cleanup:
+	freeaddrinfo(res);
 	(void)close(sock);
 
 	LOG_WRN("Close socket");
 
-	return 0;
+	return ret;
 }
 
 void https_get_thread(void *p1, void *p2, void *p3)
